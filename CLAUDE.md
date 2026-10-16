@@ -39,6 +39,12 @@ Ese archivo es el enunciado de la práctica (qué pide el curso). Donde contradi
 - PWM del auto-cero: **PWM6 / PWM7** (no PWM3/PWM4, que no existen en este chip).
 - Bits de configuración: `LVP` habilitado (RA3 es MCLR). No usar RA0/RA1/RA3 (programación).
 
+## Registro de avance (se carga en cada sesión)
+
+@docs/estado.md
+
+**Regla:** al terminar cada tarea, actualiza `docs/estado.md`: marca lo hecho, reescribe "Siguiente paso" y agrega una fila al registro (fecha, quién, qué se hizo, resultado). Solo hechos comprobados; si algo no se probó, escribe "sin probar". Las decisiones de diseño van en `docs/criterios_diseno.md`, no ahí. Cuando termines, dile a la persona que haga el commit.
+
 ## Estado
 
 - Fase 1 (actual): enlace UART PC ↔ PIC. Sin ADC ni PWM todavía.
