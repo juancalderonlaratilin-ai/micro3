@@ -1,0 +1,32 @@
+# --- MPLAB X: carpetas y archivos generados al compilar ---
+**/dist/
+**/build/
+**/debug/
+**/disassembly/
+**/nbproject/private/
+**/MPLABXLog.xml*
+*.o
+*.p1
+*.d
+*.pre
+*.sdb
+*.cmf
+*.elf
+*.hex
+*.map
+*.lst
+*.sym
+*.rlf
+*.hxl
+*.cof
+
+# --- Altium: archivos temporales y de respaldo ---
+**/History/
+**/__Previews/
+**/Project Logs for*/
+*.~*
+*.SchDocPreview
+
+# --- Windows ---
+Thumbs.db
+desktop.ini
