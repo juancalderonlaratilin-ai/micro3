@@ -31,3 +31,6 @@
 Thumbs.db
 desktop.ini
 hardware/
+
+# PDFs pesados de fabricante
+docs/*.pdf
