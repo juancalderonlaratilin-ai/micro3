@@ -56,11 +56,13 @@ void __interrupt() INTERRUPT_InterruptManager (void)
     {
         if(PIE3bits.TX1IE == 1 && PIR3bits.TX1IF == 1)
         {
-            EUSART1_TxDefaultInterruptHandler();
+            // [C-06] Llamada directa a la ISR de TX (antes: a través del puntero EUSART1_TxDefaultInterruptHandler)
+            EUSART1_Transmit_ISR();
         } 
         else if(PIE3bits.RC1IE == 1 && PIR3bits.RC1IF == 1)
         {
-            EUSART1_RxDefaultInterruptHandler();
+            // [C-06] Llamada directa a la ISR de RX (antes: a través del puntero EUSART1_RxDefaultInterruptHandler)
+            EUSART1_Receive_ISR();
         } 
         else
         {

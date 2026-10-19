@@ -82,17 +82,17 @@ typedef union {
     uint8_t status;
 }eusart1_status_t;
 
-/**
- Section: Global variables
- */
-extern volatile uint8_t eusart1TxBufferRemaining;
-extern volatile uint8_t eusart1RxCount;
+/* [C-09] Aquí MCC declaraba como "extern" los contadores eusart1TxBufferRemaining y
+ * eusart1RxCount. Ya no existen: cada buffer usa solo cabeza y cola, que son
+ * privadas de eusart1.c (los demás archivos usan las funciones de abajo). */
+
+/* [C-06] Aquí MCC declaraba como "extern" los punteros EUSART1_TxDefaultInterruptHandler
+ * y EUSART1_RxDefaultInterruptHandler. Ya no existen: interrupt_manager.c llama directo
+ * a EUSART1_Transmit_ISR() y EUSART1_Receive_ISR(), declaradas más abajo. */
 
 /**
   Section: EUSART1 APIs
 */
-extern void (*EUSART1_TxDefaultInterruptHandler)(void);
-extern void (*EUSART1_RxDefaultInterruptHandler)(void);
 
 /**
   @Summary
@@ -117,145 +117,34 @@ extern void (*EUSART1_RxDefaultInterruptHandler)(void);
 void EUSART1_Initialize(void);
 
 /**
-  @Summary
-    Checks if the EUSART1 transmitter is ready to transmit data
-
-  @Description
-    This routine checks if EUSART1 transmitter is ready 
-    to accept and transmit data byte
-
-  @Preconditions
-    EUSART1_Initialize() function should have been called
-    before calling this function.
-    EUSART1 transmitter should be enabled before calling 
-    this function
-
-  @Param
-    None
+  [C-09] EUSART1_is_tx_ready
+  ¿Cabe al menos un byte más en el buffer de TX? No espera. Se llama solo desde main.
 
   @Returns
-    Status of EUSART1 transmitter
-    TRUE: EUSART1 transmitter is ready
-    FALSE: EUSART1 transmitter is not ready
-    
-  @Example
-    <code>
-    void main(void)
-    {
-        volatile uint8_t rxData;
-        
-        // Initialize the device
-        SYSTEM_Initialize();
-        
-        while(1)
-        {
-            // Logic to echo received data
-            if(EUSART1_is_rx_ready())
-            {
-                rxData = UART1_Read();
-                if(EUSART1_is_tx_ready())
-                {
-                    EUSART1Write(rxData);
-                }
-            }
-        }
-    }
-    </code>
+    true  si el buffer de TX NO está lleno (EUSART1_Write aceptará el byte)
+    false si está lleno
 */
 bool EUSART1_is_tx_ready(void);
 
 /**
-  @Summary
-    Checks if the EUSART1 receiver ready for reading
-
-  @Description
-    This routine checks if EUSART1 receiver has received data 
-    and ready to be read
-
-  @Preconditions
-    EUSART1_Initialize() function should be called
-    before calling this function
-    EUSART1 receiver should be enabled before calling this 
-    function
-
-  @Param
-    None
+  [C-09] EUSART1_is_rx_ready
+  ¿Hay al menos un byte recibido esperando en el buffer de RX? No espera.
+  Se llama solo desde main.
 
   @Returns
-    Status of EUSART1 receiver
-    TRUE: EUSART1 receiver is ready for reading
-    FALSE: EUSART1 receiver is not ready for reading
-    
-  @Example
-    <code>
-    void main(void)
-    {
-        volatile uint8_t rxData;
-        
-        // Initialize the device
-        SYSTEM_Initialize();
-        
-        while(1)
-        {
-            // Logic to echo received data
-            if(EUSART1_is_rx_ready())
-            {
-                rxData = UART1_Read();
-                if(EUSART1_is_tx_ready())
-                {
-                    EUSART1_Write(rxData);
-                }
-            }
-        }
-    }
-    </code>
+    true  si hay algún byte por leer con EUSART1_Read
+    false si el buffer de RX está vacío
 */
 bool EUSART1_is_rx_ready(void);
 
 /**
-  @Summary
-    Checks if EUSART1 data is transmitted
-
-  @Description
-    This function return the status of transmit shift register
-
-  @Preconditions
-    EUSART1_Initialize() function should be called
-    before calling this function
-    EUSART1 transmitter should be enabled and EUSART1_Write
-    should be called before calling this function
-
-  @Param
-    None
+  [C-10] EUSART1_is_tx_done
+  ¿Ya salió TODO por el cable? Se llama solo desde main.
 
   @Returns
-    Status of EUSART1 receiver
-    TRUE: Data completely shifted out if the USART shift register
-    FALSE: Data is not completely shifted out of the shift register
-    
-  @Example
-    <code>
-    void main(void)
-    {
-        volatile uint8_t rxData;
-        
-        // Initialize the device
-        SYSTEM_Initialize();
-        
-        while(1)
-        {
-            if(EUSART1_is_tx_ready())
-            {
-				LED_0_SetHigh();
-                EUSART1Write(rxData);
-            }
-			if(EUSART1_is_tx_done()
-            {
-                LED_0_SetLow();
-            }
-        }
-    }
-    </code>
+    true  solo si el buffer de TX está vacío Y el registro de desplazamiento
+          terminó (TRMT = 1)
+    false si queda algún byte en el buffer o se está enviando uno
 */
 bool EUSART1_is_tx_done(void);
 
@@ -293,9 +182,9 @@ bool EUSART1_is_tx_done(void);
         while(1)
         {
             // Logic to echo received data
-            if(EUSART1_is_rx_ready())
+            // [C-07] Read ya no devuelve el byte: lo deja en rxData y devuelve true/false
+            if(EUSART1_Read(&rxData))
             {
-                rxData = EUSART1_Read();
                 rxStatus = EUSART1_get_last_status();
                 if(rxStatus.ferr){
                     LED_0_SetHigh();
@@ -308,44 +197,61 @@ bool EUSART1_is_tx_done(void);
 eusart1_status_t EUSART1_get_last_status(void);
 
 /**
-  @Summary
-    Read a byte of data from the EUSART1.
-
-  @Description
-    This routine reads a byte of data from the EUSART1.
-
-  @Preconditions
-    EUSART1_Initialize() function should have been called
-    before calling this function. The transfer status should be checked to see
-    if the receiver is not empty before calling this function.
+  [C-07] EUSART1_Read
+  Saca UN byte del buffer de RX SIN esperar. Se llama solo desde main.
+  El estado de error de ese byte queda disponible en EUSART1_get_last_status().
 
   @Param
-    None
+    byte - dirección donde se deja el byte leído (solo se escribe si hay dato)
 
   @Returns
-    A data byte received by the driver.
+    true  si había un byte y quedó en *byte
+    false si el buffer de RX está vacío (*byte no se toca)
 */
-uint8_t EUSART1_Read(void);
+bool EUSART1_Read(uint8_t *byte);
 
- /**
-  @Summary
-    Writes a byte of data to the EUSART1.
-
-  @Description
-    This routine writes a byte of data to the EUSART1.
-
-  @Preconditions
-    EUSART1_Initialize() function should have been called
-    before calling this function. The transfer status should be checked to see
-    if transmitter is not busy before calling this function.
+/**
+  [C-08] EUSART1_Write
+  Pone UN byte en el buffer de TX SIN esperar; la ISR de TX lo envía por la UART.
+  Se llama solo desde main.
 
   @Param
-    txData  - Data byte to write to the EUSART1
+    txData - byte a enviar
 
   @Returns
-    None
+    true  si el byte quedó encolado
+    false si el buffer de TX estaba lleno (el byte NO se encola)
 */
-void EUSART1_Write(uint8_t txData);
+bool EUSART1_Write(uint8_t txData);
+
+/**
+  [C-08] tx_DAT  (firma pedida en clase)
+  Encola un bloque de "size" bytes en el buffer de TX SIN esperar. TODO O NADA:
+  si no caben los size bytes, no se encola ninguno. Se llama solo desde main.
+
+  @Param
+    DATA - dirección del primer byte a enviar
+    size - cuántos bytes enviar
+
+  @Returns
+    true  si el bloque quedó encolado (o si size es 0)
+    false si DATA es NULL o no hay espacio para el bloque completo
+*/
+bool tx_DAT(const char *DATA, uint16_t size);
+
+/**
+  [C-08] tx_string  (firma pedida en clase)
+  Encola una cadena terminada en '\0' (el '\0' no se envía). Usa tx_DAT.
+  Se llama solo desde main.
+
+  @Param
+    data - dirección del primer carácter de la cadena
+
+  @Returns
+    true  si la cadena completa quedó encolada
+    false si data es NULL o no cabe
+*/
+bool tx_string(const char *data);
 
 /**
   @Summary
@@ -465,44 +371,15 @@ void EUSART1_SetOverrunErrorHandler(void (* interruptHandler)(void));
 void EUSART1_SetErrorHandler(void (* interruptHandler)(void));
 
 /**
-  @Summary
-    Sets the transmit handler function to be called by the interrupt service
-
-  @Description
-    Calling this function will set a new custom function that will be 
-    called when the transmit interrupt needs servicing.
-
-  @Preconditions
-    EUSART1_Initialize() function should have been called
-    for the ISR to execute correctly.
-
-  @Param
-    A pointer to the new function
+  [C-09] EUSART1_get_overflow
+  Dice si la ISR de RX descartó algún byte porque el buffer de RX estaba lleno
+  y borra el aviso. Se llama solo desde main.
 
   @Returns
-    None
+    true  si hubo al menos un byte descartado desde la última llamada
+    false si no se perdió nada
 */
-void EUSART1_SetTxInterruptHandler(void (* interruptHandler)(void));
-
-/**
-  @Summary
-    Sets the receive handler function to be called by the interrupt service
-
-  @Description
-    Calling this function will set a new custom function that will be 
-    called when the receive interrupt needs servicing.
-
-  @Preconditions
-    EUSART1_Initialize() function should have been called
-    for the ISR to execute correctly.
-
-  @Param
-    A pointer to the new function
-
-  @Returns
-    None
-*/
-void EUSART1_SetRxInterruptHandler(void (* interruptHandler)(void));
+bool EUSART1_get_overflow(void);
 
 #ifdef __cplusplus  // Provide C++ Compatibility
 

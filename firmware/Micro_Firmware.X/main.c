@@ -43,32 +43,56 @@
 
 #include "mcc_generated_files/mcc.h"
 
+/* [T-03] Cuenta los bytes que el eco no pudo devolver porque el buffer de TX estaba lleno.
+ * Es "volatile" y global para poder verla en el depurador de MPLAB X (ventana Variables).
+ * shortcut: es de 8 bits y da la vuelta tras 255; en la Fase 1 basta ver si es distinta
+ * de 0. Si hace falta un conteo exacto, cambiar a uint16_t. */
+volatile uint8_t echoBytesLost = 0;
+
 /*
                          Main application
  */
+/**
+  [T-03] main  (programa de eco para probar la UART)
+  Para qué sirve: devolver al PC cada byte que llega por la UART, sin perder ni cambiar
+                  ninguno, y sin ninguna espera bloqueante (ni while que espere ni
+                  __delay_ms). Sirve para las pruebas 1.5, 1.6, 1.7, 1.9, 1.13 y 1.14.
+*/
 void main(void)
 {
+    uint8_t b; // el byte que se acaba de leer de la UART
+
     // initialize the device
     SYSTEM_Initialize();
 
-    // When using interrupts, you need to set the Global and Peripheral Interrupt Enable bits
-    // Use the following macros to:
+    // [T-03] Interrupciones: sin esto, la ISR nunca se ejecuta y nada se envía ni se recibe.
+    // PEIE = Peripheral Interrupt Enable (bit de INTCON): deja pasar las interrupciones de los
+    // periféricos (aquí, la UART). GIE = Global Interrupt Enable (bit de INTCON): interruptor
+    // general. Se encienden en este orden y AL FINAL de la configuración, para que ninguna
+    // interrupción llegue con la UART a medio configurar.
+    INTERRUPT_PeripheralInterruptEnable();
+    INTERRUPT_GlobalInterruptEnable();
 
-    // Enable the Global Interrupts
-    //INTERRUPT_GlobalInterruptEnable();
+    // [T-03] Mensaje de arranque. tx_string solo mete los caracteres en el buffer de TX y
+    // regresa enseguida; la ISR de TX los va enviando mientras main sigue. Si no cupiera
+    // (no pasa: son 14 bytes y caben 63), devolvería false y no se enviaría nada.
+    tx_string("Micro3 listo\r\n");
 
-    // Enable the Peripheral Interrupts
-    //INTERRUPT_PeripheralInterruptEnable();
-
-    // Disable the Global Interrupts
-    //INTERRUPT_GlobalInterruptDisable();
-
-    // Disable the Peripheral Interrupts
-    //INTERRUPT_PeripheralInterruptDisable();
-
+    // Bucle infinito del programa. Cada vuelta es muy corta porque nada espera.
     while (1)
     {
-        // Add your application code
+        // [T-03] EUSART1_Read devuelve true solo si había un byte esperando en el buffer de RX
+        // (y lo deja en b). Si no hay nada devuelve false al instante y el bucle sigue.
+        if (EUSART1_Read(&b))
+        {
+            // EUSART1_Write devuelve false si el buffer de TX está lleno. En la Fase 1 NO se
+            // reintenta (reintentar sería esperar): el byte se pierde y solo se cuenta.
+            // En la práctica no pasa: el eco sale a la misma velocidad a la que llega.
+            if (!EUSART1_Write(b))
+            {
+                echoBytesLost++;
+            }
+        }
     }
 }
 /**

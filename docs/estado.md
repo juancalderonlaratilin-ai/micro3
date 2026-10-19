@@ -32,7 +32,14 @@ Proyecto Micro 3 · Última actualización: 2026-10-19
 
 ## Estado del código
 
-Sin código propio todavía. En `firmware/Micro_Firmware.X` hay código **generado por MCC en clase**, que la persona indica que sí puede usarse como base (el enunciado dice que no: confirmar con el profesor). Se revisa en `docs/revision_codigo_mcc.md`.
+En `firmware/Micro_Firmware.X` hay código **generado por MCC en clase**, que la persona indica que sí puede usarse como base (el enunciado dice que no: confirmar con el profesor). Se revisa en `docs/revision_codigo_mcc.md`.
+
+**T-03 implementada, sin probar** (cambios C-06 a C-10; C-05, buffers 64/32, ya estaba en `eusart1.c`):
+- `eusart1.c` / `eusart1.h`: buffers circulares con cabeza y cola (sin contadores), `EUSART1_Write` y `EUSART1_Read` sin espera (devuelven `bool`), `tx_DAT` (todo o nada) y `tx_string`, ISR de TX y de RX sin contador, `is_tx_done` con `TRMT`.
+- `interrupt_manager.c`: llama directo a `EUSART1_Transmit_ISR()` y `EUSART1_Receive_ISR()`.
+- `main.c`: eco con `PEIE`/`GIE` y `tx_string("Micro3 listo\r\n")` al arrancar.
+- Agregados que la instrucción no pedía: `#error` si un tamaño de buffer no es potencia de 2, `EUSART1_get_overflow()` (devuelve `bool`) y el contador `echoBytesLost` en `main.c`.
+- Compilación de prueba con XC8 2.40 por línea de comandos (salida fuera del proyecto): sin errores; 6 avisos `(520)` de funciones sin llamar (5 de `eusart1.c` y el de `PIN_MANAGER_IOC`, que ya existía). Sin compilar todavía en MPLAB X.
 
 ## Sin confirmar
 
@@ -44,10 +51,10 @@ Sin código propio todavía. En `firmware/Micro_Firmware.X` hay código **genera
 
 ## Siguiente paso
 
-1. Seguir la revisión del código de MCC (`docs/revision_codigo_mcc.md`), parte por parte. T-01 (mover MCC a `referencia_mcc/`) queda en espera.
-2. Escribir `config.c` (bits de configuración) y `system_init()` con el reloj a 16 MHz.
-3. Escribir `uart.c` y `uart.h` (buffers circulares, una sola ISR, `tx_DAT` y `tx_string`) y el eco de `main.c`.
-4. Probar con las pruebas 1.5 y 1.6 de `docs/protocolos_prueba.md`.
+1. La persona: *Clean and Build* en MPLAB X (anotar los warnings), programar con el SNAP y correr las pruebas 1.5, 1.6, 1.7, 1.9, 1.13 y 1.14 de `docs/protocolos_prueba.md` (guía: `docs/guia_prueba_uart_snap.md`). El resultado decide si T-03 pasa a `probada` o `bloqueada`.
+2. Decidir (planificador/persona): si se acepta que queden avisos `(520)` de funciones sin llamar (el criterio de T-03 dice "sin warnings"), y cómo se hacen las pruebas 1.9 y 1.14, que el eco no cubre (no llama a `tx_DAT` y `main` siempre lee el RX).
+3. Seguir la revisión del código de MCC (`docs/revision_codigo_mcc.md`), parte por parte. T-01 (mover MCC a `referencia_mcc/`) queda en espera.
+4. T-02: `config.c` (bits de configuración) y `system_init()` con el reloj a 16 MHz.
 
 ## Registro de sesiones
 
@@ -60,3 +67,4 @@ Sin código propio todavía. En `firmware/Micro_Firmware.X` hay código **genera
 | 2026-10-19 | Chat de Claude | Revisión del código de MCC parte por parte; parte 1 (bits de configuración) explicada; cambios C-01 a C-04 propuestos | Sin aprobar |
 | 2026-10-19 | Chat de Claude | Formato fijo para explicar código en `MASTER_PLAN.md`; mapa de ventanas de MCC a archivos; MCC permitido según la persona; T-01 en espera | Pendiente confirmar con el profesor |
 | 2026-10-19 | Chat de Claude | Instrucciones para Claude Code en `docs/instrucciones_claude_code_uart.md`; T-03 aprobada (C-06 a C-10) | Falta C-05 en MCC y la implementación |
+| 2026-10-19 | Claude Code | T-03 en 5 pasos revisados uno a uno: `eusart1.c/.h`, `interrupt_manager.c`, `main.c` de eco (C-06 a C-10). Buffers 64/32 ya presentes. Archivos en ISO-8859-1 con CRLF | `implementada, sin probar`. Compilación de prueba XC8 2.40: sin errores, 6 avisos (520). Sin MPLAB X ni chip. Sin commit |
