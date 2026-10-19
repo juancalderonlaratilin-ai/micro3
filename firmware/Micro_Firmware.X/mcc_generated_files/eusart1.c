@@ -59,8 +59,8 @@
 /**
   Section: Global Variables
 */
-volatile uint8_t eusart1TxHead = 0;
-volatile uint8_t eusart1TxTail = 0;
+volatile uint8_t eusart1TxHead = 0; // apuntador de la cabeza del buffer
+volatile uint8_t eusart1TxTail = 0; // apuntador de la cola del buffer
 volatile uint8_t eusart1TxBuffer[EUSART1_TX_BUFFER_SIZE];
 volatile uint8_t eusart1TxBufferRemaining;
 
@@ -87,24 +87,26 @@ void EUSART1_DefaultErrorHandler(void);
 
 void EUSART1_Initialize(void)
 {
-    // disable interrupts before changing states
-    PIE3bits.RC1IE = 0;
-    EUSART1_SetRxInterruptHandler(EUSART1_Receive_ISR);
-    PIE3bits.TX1IE = 0;
+    // deshabilita las instrucciones antes de hacer un cambio de estado
+    PIE3bits.RC1IE = 0;  // enable de interrupcion de recepcion
+    
+    EUSART1_SetRxInterruptHandler(EUSART1_Receive_ISR); // Le asigna a la variable RxIntteruptHandler la funcion Eusart1_recieve
+    // EUSART1_Receive_ISR  es la señal que saca un byte al buffer y lo manda
+    PIE3bits.TX1IE = 0; // enable de interrupcion de transmision
+    
     EUSART1_SetTxInterruptHandler(EUSART1_Transmit_ISR);
-    // Set the EUSART1 module to the options selected in the user interface.
 
     // ABDOVF no_overflow; SCKP Non-Inverted; BRG16 16bit_generator; WUE disabled; ABDEN disabled; 
     BAUD1CON = 0x08;
 
     // SPEN enabled; RX9 8-bit; CREN enabled; ADDEN disabled; SREN disabled; 
-    RC1STA = 0x90;
+    RC1STA = 0x90; // status de Recepcion
 
     // TX9 8-bit; TX9D 0; SENDB sync_break_complete; TXEN enabled; SYNC asynchronous; BRGH hi_speed; CSRC slave; 
-    TX1STA = 0x24;
+    TX1STA = 0x24; // status de Transmision
 
     // SP1BRGL 34; 
-    SP1BRGL = 0x22;
+    SP1BRGL = 0x22; // configuracion de bay rate
 
     // SP1BRGH 0; 
     SP1BRGH = 0x00;
@@ -116,7 +118,7 @@ void EUSART1_Initialize(void)
 
     eusart1RxLastError.status = 0;
 
-    // initializing the driver state
+    // inicio de variables para funcionamiento del buffer circular
     eusart1TxHead = 0;
     eusart1TxTail = 0;
     eusart1TxBufferRemaining = sizeof(eusart1TxBuffer);
@@ -129,30 +131,30 @@ void EUSART1_Initialize(void)
     PIE3bits.RC1IE = 1;
 }
 
-bool EUSART1_is_tx_ready(void)
+bool EUSART1_is_tx_ready(void) // hay espacio en el buffer de envio?
 {
     return (eusart1TxBufferRemaining ? true : false);
 }
 
-bool EUSART1_is_rx_ready(void)
+bool EUSART1_is_rx_ready(void) // hay algun dato en el buffer de repecion?
 {
-    return (eusart1RxCount ? true : false);
+    return (eusart1RxCount ? true : false); // si la cuenta de cuantos bytes hay guardados en el buffer de recepcion
 }
 
-bool EUSART1_is_tx_done(void)
+bool EUSART1_is_tx_done(void) // ya salio el ultimo bit por cable 
 {
-    return TX1STAbits.TRMT;
+    return TX1STAbits.TRMT; // TRMT es el registro que desplaza los bits hacia afuera
 }
 
 eusart1_status_t EUSART1_get_last_status(void){
-    return eusart1RxLastError;
+    return eusart1RxLastError; // el ultimo byte llego con error
 }
 
 uint8_t EUSART1_Read(void)
 {
     uint8_t readValue  = 0;
     
-    while(0 == eusart1RxCount)
+    while(0 == eusart1RxCount) // cuando la cantidad de bytes en el buffer  de recepcion es igual 0 
     {
     }
 

@@ -73,11 +73,12 @@ Para quien aprende el código línea a línea. Claude, Gemini o Claude Code expl
 1. **Una parte a la vez.** Se abre con "Parte N de M" y el nombre. No se pasa a la siguiente hasta que la persona diga "entendido".
 2. **Abre:** archivo y función (ruta dentro de `firmware/Micro_Firmware.X/`) y, si viene de MCC, en qué módulo de MCC se configura.
 3. **Se encarga de:** una frase.
-4. **Lista:** tabla `nombre | qué es o significa | valor aquí`, un renglón por línea o registro, en el orden del código. Los bits del mismo registro van en una fila.
-5. **Cambiar:** el ID de `docs/revision_codigo_mcc.md`, o "nada".
-6. **Compruébalo:** una o dos preguntas.
+4. **Qué hace, por función:** las líneas se agrupan por lo que cumplen ("apagar avisos mientras se configura", "encender el receptor"), no por valores numéricos. Los valores solo si la persona los pide.
+5. **Nombres:** decodificar cada nombre nuevo la primera vez que aparece (por ejemplo `RC1IE` = *Receive 1 Interrupt Enable*: interruptor del aviso de recepción de la UART 1; `IF` = *Interrupt Flag*: bandera que sube el hardware).
+6. **Cambiar:** el ID de `docs/revision_codigo_mcc.md`, o "nada".
+7. **Compruébalo:** una o dos preguntas.
 
-Reglas: máximo unos 25 renglones por parte. Nombres, valores y páginas salen del datasheet o del `.h`, nunca de memoria; lo no verificado se marca. Sin teoría que esa parte no use.
+Reglas: lenguaje simple, una idea por renglón; máximo unos 25 renglones por parte. Nombres, valores y páginas salen del datasheet o del `.h`, nunca de memoria; lo no verificado se marca. Sin teoría que esa parte no use.
 
 ## Roles y flujo de trabajo
 
@@ -111,7 +112,7 @@ Propuesta inicial, tomada de "Siguiente paso" de `docs/estado.md`. Gemini la ref
 |---|---|---|---|
 | T-01 | Mover el código de MCC a `referencia_mcc/` y dejar `main.c` vacío | El proyecto abre y compila en MPLAB X | en espera: la persona decide si MCC se queda en el firmware |
 | T-02 | `config.c` (bits de configuración) y `system_init()` con reloj de 16 MHz | Pruebas 0.2 a 0.5 de `docs/protocolos_prueba.md` | propuesta |
-| T-03 | `uart.c` y `uart.h`: buffers circulares, una sola ISR, `tx_DAT` y `tx_string`; eco en `main.c` | Pruebas 1.1 a 1.18 | propuesta |
+| T-03 | Adaptar `eusart1.c`/`.h`, `interrupt_manager.c` y `main.c` (cambios C-06 a C-10 de `docs/revision_codigo_mcc.md`): sin esperas, buffers circulares sin contador, `tx_DAT` y `tx_string`, muy comentado. Instrucciones: `docs/instrucciones_claude_code_uart.md` | Compila sin warnings; pruebas 1.5, 1.6, 1.7, 1.9, 1.13 y 1.14 de `docs/protocolos_prueba.md` | aprobada (2026-10-19); requiere C-05 hecho en MCC |
 | T-04 | Protocolo de tramas con CRC-8 | Pruebas 2.1 a 2.8 | propuesta |
 
 ## Preguntas para el planificador
