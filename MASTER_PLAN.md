@@ -1,3 +1,4 @@
+# Archivo Maestro de Arquitectura y Tareas (Fuente de la Verdad)
 # Micro 3: contexto del proyecto
 
 Instrumento de inspección por corrientes de Foucault. El PIC adquirirá las señales I y Q, generará el auto-cero con PWM y se comunicará con LabVIEW por UART.
