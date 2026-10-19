@@ -26,6 +26,7 @@ Proyecto Micro 3 · Última actualización: 2026-10-19
 - [x] Proyecto MPLAB X creado en `firmware/Micro_Firmware.X`
 - [x] Repositorio git local (rama `master`)
 - [x] Guía para configurar MCC como referencia: `docs/guia_mcc_referencia.md`
+- [ ] Revisión guiada del código de MCC (parte 1 de 10 explicada): `docs/revision_codigo_mcc.md`
 - [x] Roles definidos: Gemini planifica y Claude Code desarrolla (`MASTER_PLAN.md`, `CLAUDE.md` y `GEMINI.md`)
 - [ ] Repositorio subido a GitHub
 
@@ -56,3 +57,4 @@ Sin código propio todavía. En `firmware/Micro_Firmware.X` hay código **genera
 | 2026-10-19 | Chat de Claude | Roles Gemini (planificador) y Claude Code (desarrollador). `CLAUDE.md` y `GEMINI.md` cargan `MASTER_PLAN.md`; se agregaron las secciones de roles y tareas | Archivos escritos. Sin probar que cada herramienta cargue el contexto |
 | 2026-10-19 | Chat de Claude | Versiones de herramientas en `MASTER_PLAN.md`: MPLAB X 6 y XC8 2.40. Guía para configurar MCC como código de referencia | Documentos actualizados |
 | 2026-10-19 | Chat de Claude | Revisión de `eusart1.c` regenerado (16 MHz, SP1BRG=34 correctos; buffers 8/8; 9 puntos a no copiar) en `docs/guia_mcc_referencia.md` §8 | Solo lectura, sin compilar |
+| 2026-10-19 | Chat de Claude | Revisión del código de MCC parte por parte; parte 1 (bits de configuración) explicada; cambios C-01 a C-04 propuestos | Sin aprobar |

@@ -13,7 +13,7 @@ Criterios de diseño y valores escogidos (reloj, baud, formato, niveles, buffers
 
 Pruebas de cada módulo (UART primero, luego protocolo, PWM, ADC, auto-cero e integración): `docs/protocolos_prueba.md`. Cada módulo debe cumplir sus criterios antes de pasar al siguiente.
 
-MCC: el código generado en clase NO es el firmware del proyecto. Se guarda solo como referencia, fuera del proyecto compilado (`referencia_mcc/`). Cómo configurarlo y qué comprobar: `docs/guia_mcc_referencia.md`. Sirve para comprobar nombres de registros y valores (por ejemplo, el registro de entrada PPS de RX1 se llama `RX1DTPPS` en el `.h`, aunque el datasheet lo llame `RX1PPS`).
+MCC: el código generado en clase NO es el firmware del proyecto. Se guarda solo como referencia, fuera del proyecto compilado (`referencia_mcc/`). Cómo configurarlo y qué comprobar: `docs/guia_mcc_referencia.md`. Revisión del código generado, parte por parte, y lista de cambios para Claude Code: `docs/revision_codigo_mcc.md`. Sirve para comprobar nombres de registros y valores (por ejemplo, el registro de entrada PPS de RX1 se llama `RX1DTPPS` en el `.h`, aunque el datasheet lo llame `RX1PPS`).
 
 ## Herramientas (versiones que usa el equipo)
 
