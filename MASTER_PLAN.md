@@ -52,3 +52,46 @@ Ese archivo es el enunciado de la práctica (qué pide el curso). Donde contradi
 - Fase 2: ADC de I/Q, PWM de auto-cero, máquina de estados.
 
 Cuando cambie una decisión de diseño (pines, baud, formato de trama), actualizar `docs/especificacion_diseno_uart.md`.
+
+## Roles y flujo de trabajo
+
+| Quién | Rol | Escribe en |
+|---|---|---|
+| Gemini | Planificador | los apartados "Tareas" y "Cambios propuestos" de este archivo, y `docs/` |
+| Claude Code | Desarrollador principal de código | `firmware/`, `docs/estado.md` y `docs/notas_pic16f18426.md` |
+| La persona (equipo) | Decide y aprueba, compila y programa con MPLAB X, mide, hace los commits | todo |
+| Chat de Claude (claude.ai) [PROPUESTA] | Verificación técnica contra el datasheet y redacción de documentos (bitácora, informes) | `docs/` |
+
+**Ciclo de cada tarea**
+
+1. Gemini la define en "Tareas" (estado `propuesta`).
+2. La persona la revisa y la pasa a `aprobada`.
+3. Claude Code la implementa, la marca `implementada, sin probar` y actualiza `docs/estado.md`.
+4. La persona compila, programa y ejecuta las pruebas indicadas de `docs/protocolos_prueba.md`, y anota el resultado: `probada` o `bloqueada`.
+5. Gemini planifica la siguiente tarea con ese resultado.
+
+**Reglas**
+
+- Este archivo y `docs/` son la única fuente de la verdad. No se copian decisiones en otros sitios.
+- Si algo se contradice, manda este orden: el enunciado de la práctica y lo que pida el profesor, luego `docs/criterios_diseno.md` y `docs/especificacion_diseno_uart.md`, luego las tareas de este archivo, y al final lo demás.
+- Los cambios a decisiones de diseño se proponen en "Cambios propuestos". Cuando la persona los aprueba, se anotan en `docs/criterios_diseno.md` (§10, con fecha).
+- Nadie escribe nombres de registros o bits de memoria: se verifican en `pic16f18426.h` o en `docs/notas_pic16f18426.md`.
+
+## Tareas
+
+Propuesta inicial, tomada de "Siguiente paso" de `docs/estado.md`. Gemini la refina.
+
+| ID | Tarea | Criterio de aceptación | Estado |
+|---|---|---|---|
+| T-01 | Mover el código de MCC a `referencia_mcc/` y dejar `main.c` vacío | El proyecto abre y compila en MPLAB X | propuesta |
+| T-02 | `config.c` (bits de configuración) y `system_init()` con reloj de 16 MHz | Pruebas 0.2 a 0.5 de `docs/protocolos_prueba.md` | propuesta |
+| T-03 | `uart.c` y `uart.h`: buffers circulares, una sola ISR, `tx_DAT` y `tx_string`; eco en `main.c` | Pruebas 1.1 a 1.18 | propuesta |
+| T-04 | Protocolo de tramas con CRC-8 | Pruebas 2.1 a 2.8 | propuesta |
+
+## Preguntas para el planificador
+
+(Las deja Claude Code cuando una tarea choca con la especificación. Gemini responde aquí.)
+
+## Cambios propuestos
+
+(Los dejan Gemini o Claude Code. La persona decide.)

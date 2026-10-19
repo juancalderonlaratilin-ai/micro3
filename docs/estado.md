@@ -25,6 +25,7 @@ Proyecto Micro 3 · Última actualización: 2026-10-16
 - [x] Circuito UART con el módulo CP2102 (divisor 1 kΩ + 2,2 kΩ en el TX): `docs/circuito_uart.svg`
 - [x] Proyecto MPLAB X creado en `firmware/Micro_Firmware.X`
 - [x] Repositorio git local (rama `master`)
+- [x] Roles definidos: Gemini planifica y Claude Code desarrolla (`MASTER_PLAN.md`, `CLAUDE.md` y `GEMINI.md`)
 - [ ] Repositorio subido a GitHub
 
 ## Estado del código
@@ -51,3 +52,4 @@ Sin código propio todavía. En `firmware/Micro_Firmware.X` hay código **genera
 | Fecha | Quién | Qué se hizo | Resultado |
 |---|---|---|---|
 | 2026-10-16 | Chat de Claude | Especificación, criterios, protocolos de prueba y circuito UART | Documentos en `docs/`. Sin código |
+| 2026-10-19 | Chat de Claude | Roles Gemini (planificador) y Claude Code (desarrollador). `CLAUDE.md` y `GEMINI.md` cargan `MASTER_PLAN.md`; se agregaron las secciones de roles y tareas | Archivos escritos. Sin probar que cada herramienta cargue el contexto |
