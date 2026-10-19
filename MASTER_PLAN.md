@@ -6,14 +6,27 @@ Instrumento de inspección por corrientes de Foucault. El PIC adquirirá las se�
 ## Estructura de la carpeta
 
 - `hardware/`: archivos de Altium (esquemático, PCB, BOM). Son binarios, no se editan desde aquí.
-- `firmware/Micro_Firmware.X/`: proyecto de MPLAB X (PIC16F18426, XC8 2.40, programador SNAP).
+- `firmware/Micro_Firmware.X/`: proyecto de MPLAB X (PIC16F18426, MPLAB X 6, XC8 2.40, programador SNAP).
 - `docs/`: especificaciones y documentación. **Empieza por `docs/especificacion_diseno_uart.md`** (qué se va a construir) y consulta **`docs/notas_pic16f18426.md`** (resumen verificado del chip, con páginas) antes de abrir los PDF grandes (datasheet de ~700 páginas, guía de XC8 de ~580).
 
 Criterios de diseño y valores escogidos (reloj, baud, formato, niveles, buffers, protocolo): `docs/criterios_diseno.md`. Circuito UART con el módulo CP2102: `docs/circuito_uart.svg`. El TX del PIC va al adaptador **por un divisor 1 kΩ + 2,2 kΩ**, no directo.
 
 Pruebas de cada módulo (UART primero, luego protocolo, PWM, ADC, auto-cero e integración): `docs/protocolos_prueba.md`. Cada módulo debe cumplir sus criterios antes de pasar al siguiente.
 
-MCC: el código generado en clase NO es el firmware del proyecto. Se guarda solo como referencia, fuera del proyecto compilado (`referencia_mcc/`). Sirve para comprobar nombres de registros y valores (por ejemplo, el registro de entrada PPS de RX1 se llama `RX1DTPPS` en el `.h`, aunque el datasheet lo llame `RX1PPS`).
+MCC: el código generado en clase NO es el firmware del proyecto. Se guarda solo como referencia, fuera del proyecto compilado (`referencia_mcc/`). Cómo configurarlo y qué comprobar: `docs/guia_mcc_referencia.md`. Sirve para comprobar nombres de registros y valores (por ejemplo, el registro de entrada PPS de RX1 se llama `RX1DTPPS` en el `.h`, aunque el datasheet lo llame `RX1PPS`).
+
+## Herramientas (versiones que usa el equipo)
+
+| Herramienta | Versión |
+|---|---|
+| MPLAB X IDE | **6** (rama 6.x) |
+| Compilador MPLAB XC8 | **2.40** |
+| Programador | SNAP |
+
+- Dentro del rango que pide el enunciado (MPLAB X 6.00–6.30, XC8 2.40–2.45).
+- Los nombres de registros y bits se comprueban en el `pic16f18426.h` de **esta** instalación (`...\xc8\v2.40\pic\include\proc\`).
+- El proyecto `Micro_Firmware.X` ya está guardado con XC8 2.40 (`nbproject/configurations.xml`). El código de MCC dice "probado con XC8 2.36 o superior": 2.40 cumple.
+- Si cambia alguna versión, actualizar esta tabla y `docs/especificacion_diseno_uart.md` §2.
 
 ## Requerimientos de la Práctica 3 (se cargan en cada sesión)
 

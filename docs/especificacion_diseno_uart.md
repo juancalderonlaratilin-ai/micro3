@@ -21,7 +21,7 @@ Proyecto Micro 3 · Firmware `firmware/Micro_Firmware.X` · Fecha: 2026-10-16
 | Parámetro | Valor | Estado |
 |---|---|---|
 | Microcontrolador | PIC16F18426 (8 bits, encapsulado de 14 pines) | confirmado (configuración del proyecto) |
-| IDE / compilador | MPLAB X + XC8 2.40 | confirmado |
+| IDE / compilador | MPLAB X 6 + XC8 2.40 | confirmado |
 | Programador | SNAP | confirmado |
 | Estilo de código | C "bare-metal" sobre registros (SFR). **Sin MCC.** | regla de la práctica |
 | Oscilador | **HFINTOSC interno a 16 MHz**, sin PLL ni cristal (exactitud nominal ±2 %) | [PROPUESTA] |
@@ -175,7 +175,7 @@ Arquitectura guiada por eventos: las interrupciones solo capturan el evento y mu
 | FIFO de TX | 64 bytes | |
 | Índices (`head`, `tail`) | `uint8_t`, `volatile` | la ISR escribe uno y el programa principal el otro |
 
-El chip tiene 2048 B de RAM [VERIFICADO], así que hay margen para agrandar las FIFO si la Fase 2 lo pide.
+El chip tiene 2048 B de RAM [VERIFICADO], así que hay margen para agrandar las FIFO si la Fase 2 lo pide. Los motivos de cada tamaño y qué pasa al llenarse están en `docs/criterios_diseno.md` §6.1.
 
 Las operaciones de la FIFO que compartan estado entre la ISR y el programa principal deben ser atómicas (índice de 8 bits, o sección crítica corta).
 

@@ -1,6 +1,6 @@
 # Estado del proyecto (bitácora de avance)
 
-Proyecto Micro 3 · Última actualización: 2026-10-16
+Proyecto Micro 3 · Última actualización: 2026-10-19
 
 > **Para qué sirve:** es lo primero que se lee al abrir una sesión nueva (Claude Code lo carga desde `CLAUDE.md`; en el chat de Claude se le pide "lee `docs/estado.md`"). Dice **dónde quedó el trabajo y qué sigue**. Las decisiones y sus motivos viven en `criterios_diseno.md`, no aquí.
 >
@@ -25,6 +25,7 @@ Proyecto Micro 3 · Última actualización: 2026-10-16
 - [x] Circuito UART con el módulo CP2102 (divisor 1 kΩ + 2,2 kΩ en el TX): `docs/circuito_uart.svg`
 - [x] Proyecto MPLAB X creado en `firmware/Micro_Firmware.X`
 - [x] Repositorio git local (rama `master`)
+- [x] Guía para configurar MCC como referencia: `docs/guia_mcc_referencia.md`
 - [x] Roles definidos: Gemini planifica y Claude Code desarrolla (`MASTER_PLAN.md`, `CLAUDE.md` y `GEMINI.md`)
 - [ ] Repositorio subido a GitHub
 
@@ -53,3 +54,5 @@ Sin código propio todavía. En `firmware/Micro_Firmware.X` hay código **genera
 |---|---|---|---|
 | 2026-10-16 | Chat de Claude | Especificación, criterios, protocolos de prueba y circuito UART | Documentos en `docs/`. Sin código |
 | 2026-10-19 | Chat de Claude | Roles Gemini (planificador) y Claude Code (desarrollador). `CLAUDE.md` y `GEMINI.md` cargan `MASTER_PLAN.md`; se agregaron las secciones de roles y tareas | Archivos escritos. Sin probar que cada herramienta cargue el contexto |
+| 2026-10-19 | Chat de Claude | Versiones de herramientas en `MASTER_PLAN.md`: MPLAB X 6 y XC8 2.40. Guía para configurar MCC como código de referencia | Documentos actualizados |
+| 2026-10-19 | Chat de Claude | Revisión de `eusart1.c` regenerado (16 MHz, SP1BRG=34 correctos; buffers 8/8; 9 puntos a no copiar) en `docs/guia_mcc_referencia.md` §8 | Solo lectura, sin compilar |

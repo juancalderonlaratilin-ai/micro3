@@ -18,7 +18,7 @@ Proyecto Micro 3 · Enlace UART PC ↔ PIC (Fase 1) · Fecha: 2026-10-16
 | 4 | Baud rate | **115200** (`SP1BRG = 34`, error −0,79 %) | [PROPUESTA] |
 | 5 | Formato de byte | **8N1** (8 datos, sin paridad, 1 parada) | [PROPUESTA] |
 | 6 | Protocolo | **Binario**, tramas fijas de 9 bytes con CRC-8 | [PROPUESTA] |
-| 7 | Buffers | Circulares (cabeza y cola): RX de 32 bytes, TX de 64 bytes | [PROPUESTA] |
+| 7 | Buffers | Circulares (cabeza y cola): RX de 32 bytes, TX de 64 bytes. Motivos en §6.1 | [PROPUESTA] |
 | 8 | Interrupciones | RX siempre activa. TX solo mientras haya datos. Una sola ISR | [VERIFICADO] |
 | 9 | Pines UART | TX = RC4 (pin 6), RX = RC5 (pin 5) | [PROPUESTA] |
 | 10 | Nivel de entrada de RX | TTL (`INLVLC5 = 0`) | [VERIFICADO] |
@@ -130,6 +130,53 @@ reposo ‾‾‾|START|D0|D1|D2|D3|D4|D5|D6|D7|STOP|‾‾‾ reposo
 | ISR | Una sola (el PIC16 tiene un único vector, `0x0004`). Se comprueba bandera **y** habilitación de cada fuente | Sin prioridades |
 | `TX1IE` | Solo se activa cuando hay datos y se apaga al vaciar | `TX1IF` vale 1 siempre que `TX1REG` esté vacío, aunque `TX1IE` sea 0: dejarlo activo siempre hace que la ISR se repita sin parar |
 
+### 6.1 Tamaño de los buffers: RX 32 bytes, TX 64 bytes [PROPUESTA]
+
+**Decisión:** FIFO de recepción de 32 bytes y de transmisión de 64 bytes, ambas circulares con índices `head` y `tail` de 8 bits. El profesor no fijó tamaños en lo que tenemos; el MCC de clase usó 8 por defecto. Estos valores son nuestros y se pueden revisar.
+
+**Datos de partida** (a 115200 baud, 8N1 = 10 bits por byte):
+
+| Dato | Valor |
+|---|---|
+| Tiempo por byte | 86,8 µs |
+| Trama (9 bytes) | 781 µs |
+| Capacidad útil de un buffer de N bytes | N − 1 (se considera lleno cuando `head + 1 == tail`, sin contador extra) |
+
+| Buffer | Tamaño | Capacidad útil | Tramas de 9 B que caben | Tiempo de línea que cubre |
+|---|---|---|---|---|
+| MCC de clase (RX y TX) | 8 | 7 | 0 | 0,6 ms |
+| **RX** | **32** | 31 | 3 | 2,7 ms |
+| **TX** | **64** | 63 | 7 | 5,5 ms |
+
+**Por qué 32 en RX**
+- El PC solo manda órdenes cortas (una trama de 9 bytes, o pocas seguidas). Casi siempre el buffer está vacío.
+- Lo que hay que cubrir es el tiempo que el programa principal pueda tardar en volver a `parser_task()`. Con 31 bytes útiles son 2,7 ms de margen. Con los 8 bytes del MCC (7 útiles) serían 0,6 ms, menos que una sola trama (0,78 ms): cualquier tarea un poco larga en `main` perdería bytes.
+- Aquí el buffer es el segundo escalón: el hardware solo tiene una FIFO de 2 bytes, y la ISR debe vaciarla en menos de unos 174 µs (ver la especificación).
+
+**Por qué 64 en TX**
+- El PIC es el que más habla. En la Fase 2 serán 9 bytes por muestra, a unas 200 muestras por segundo (1800 B/s, el 16 % de la línea; es una propuesta de velocidad de muestreo, no un dato confirmado). Entre muestras pasan 5 ms y una trama tarda 0,78 ms en salir.
+- Una respuesta (por ejemplo PONG) puede coincidir con tramas de datos. 63 bytes útiles son 7 tramas completas: aguanta ráfagas de varias tramas encoladas de golpe sin devolver `false`.
+- Vaciar el buffer completo toma 5,5 ms, casi un periodo de muestreo: aunque se llene, los datos no quedan atrasados más de eso.
+
+**Por qué potencia de 2**
+- El índice se envuelve con `idx = (idx + 1) & (N - 1)`: una operación. Con un tamaño cualquiera habría que usar `%`, que en un PIC16 sin divisor por hardware lo resuelve una rutina de software más lenta, y esto corre dentro de la ISR.
+- Los índices de 8 bits se leen y escriben en una sola instrucción, así que no se corrompen si la ISR interrumpe a `main` a mitad de lectura.
+
+**Por qué no más grandes**
+- Cuestan RAM: 32 + 64 = 96 bytes de 2048 (4,7 %). Sobra margen, pero la Fase 2 también necesita datos de I y Q, variables del auto-cero y el parser.
+- Un buffer más grande solo esconde un problema de tiempo: si `main` tarda tanto que se llena, el defecto es la tarea larga, no el buffer.
+
+**Qué pasa cuando se llena**
+
+| Buffer | Comportamiento |
+|---|---|
+| RX lleno | La ISR descarta el byte nuevo y marca la bandera de overflow (error 3 del protocolo). No se pisa un dato sin leer |
+| TX lleno | `tx_DAT` y `tx_string` devuelven `false`. Quien llama decide: reintentar o descartar la muestra y contarla |
+
+**Cuándo revisar el tamaño:** si la trama pasa de 9 bytes, si sube la frecuencia de muestreo, o si una prueba mide que `main` tarda más de 2,7 ms sin atender el RX. Regla: TX ≥ (tramas por ráfaga × bytes por trama) + 1; RX ≥ (tiempo máximo sin leer ÷ 86,8 µs) + 1.
+
+**Cómo comprobarlo:** prueba de ráfaga en `docs/protocolos_prueba.md` (módulo 1): mandar tramas seguidas desde el PC y contar bytes perdidos y errores de overflow.
+
 **Diferencia con el MCC de clase:** sus buffers son de 8 bytes y `EUSART1_Read` y `EUSART1_Write` tienen bucles `while` que esperan, algo prohibido por la regla del proyecto.
 
 ---
@@ -210,3 +257,4 @@ Fuente de los niveles del CP2102: datasheet del CP2102-GMR (Silicon Labs), secci
 | 2026-10-16 | Flash 28 KB y RAM 2 KB (antes 14 KB y 1 KB) | Valores del datasheet |
 | 2026-10-16 | `RX1PPS` es `RX1DTPPS` en el `.h` de XC8 | Visto en el código generado por MCC |
 | 2026-10-16 | TX del PIC pasa por un divisor | El datasheet del CP2102-GMR no describe sus entradas como tolerantes a 5 V, y el máximo es VIO + 0,5 V. Antes se suponía que sí toleraban 5 V |
+| 2026-10-19 | Documentados los motivos del tamaño de los buffers (§6.1): RX 32, TX 64, potencia de 2, comportamiento al llenarse | La revisión de `eusart1.c` de MCC mostró que 8 bytes no cubren una trama y que su RX no controla el desborde |
