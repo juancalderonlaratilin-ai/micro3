@@ -26,25 +26,25 @@ Proyecto Micro 3 · Última actualización: 2026-10-19
 - [x] Proyecto MPLAB X creado en `firmware/Micro_Firmware.X`
 - [x] Repositorio git local (rama `master`)
 - [x] Guía para configurar MCC como referencia: `docs/guia_mcc_referencia.md`
-- [ ] Revisión guiada del código de MCC (parte 1 de 10 explicada): `docs/revision_codigo_mcc.md`
+- [ ] Revisión guiada del código de MCC (partes 1 y 6 de 10 explicadas): `docs/revision_codigo_mcc.md`
 - [x] Roles definidos: Gemini planifica y Claude Code desarrolla (`MASTER_PLAN.md`, `CLAUDE.md` y `GEMINI.md`)
 - [ ] Repositorio subido a GitHub
 
 ## Estado del código
 
-Sin código propio todavía. En `firmware/Micro_Firmware.X` hay código **generado por MCC en clase**, que no es parte del firmware (regla: sin MCC). Pendiente moverlo a `referencia_mcc/`.
+Sin código propio todavía. En `firmware/Micro_Firmware.X` hay código **generado por MCC en clase**, que la persona indica que sí puede usarse como base (el enunciado dice que no: confirmar con el profesor). Se revisa en `docs/revision_codigo_mcc.md`.
 
 ## Sin confirmar
 
 1. Baud pedido por el profesor: 115200 (lo escogido) o 125 000 (lo que dejó el MCC de clase).
-2. Si el entregable final puede usar MCC.
+2. Si el entregable final puede usar MCC: la persona dice que sí; el enunciado dice que no. Confirmarlo con el profesor.
 3. Que el chip sea `PIC16F18426` y no el `LF` (máximo 3,6 V), y que el PIC se alimente de los 3,7 V.
 4. Marcado y pines del módulo CP2102 (jumper de nivel en 3,3 V; TXD en reposo ≈3,3 V con el multímetro).
 5. Que los pines propuestos coincidan con la placa.
 
 ## Siguiente paso
 
-1. Mover el código de MCC a `referencia_mcc/` y dejar `main.c` vacío. Compilar en MPLAB X para comprobar que abre.
+1. Seguir la revisión del código de MCC (`docs/revision_codigo_mcc.md`), parte por parte. T-01 (mover MCC a `referencia_mcc/`) queda en espera.
 2. Escribir `config.c` (bits de configuración) y `system_init()` con el reloj a 16 MHz.
 3. Escribir `uart.c` y `uart.h` (buffers circulares, una sola ISR, `tx_DAT` y `tx_string`) y el eco de `main.c`.
 4. Probar con las pruebas 1.5 y 1.6 de `docs/protocolos_prueba.md`.
@@ -58,3 +58,4 @@ Sin código propio todavía. En `firmware/Micro_Firmware.X` hay código **genera
 | 2026-10-19 | Chat de Claude | Versiones de herramientas en `MASTER_PLAN.md`: MPLAB X 6 y XC8 2.40. Guía para configurar MCC como código de referencia | Documentos actualizados |
 | 2026-10-19 | Chat de Claude | Revisión de `eusart1.c` regenerado (16 MHz, SP1BRG=34 correctos; buffers 8/8; 9 puntos a no copiar) en `docs/guia_mcc_referencia.md` §8 | Solo lectura, sin compilar |
 | 2026-10-19 | Chat de Claude | Revisión del código de MCC parte por parte; parte 1 (bits de configuración) explicada; cambios C-01 a C-04 propuestos | Sin aprobar |
+| 2026-10-19 | Chat de Claude | Formato fijo para explicar código en `MASTER_PLAN.md`; mapa de ventanas de MCC a archivos; MCC permitido según la persona; T-01 en espera | Pendiente confirmar con el profesor |

@@ -13,7 +13,7 @@ Criterios de diseño y valores escogidos (reloj, baud, formato, niveles, buffers
 
 Pruebas de cada módulo (UART primero, luego protocolo, PWM, ADC, auto-cero e integración): `docs/protocolos_prueba.md`. Cada módulo debe cumplir sus criterios antes de pasar al siguiente.
 
-MCC: el código generado en clase NO es el firmware del proyecto. Se guarda solo como referencia, fuera del proyecto compilado (`referencia_mcc/`). Cómo configurarlo y qué comprobar: `docs/guia_mcc_referencia.md`. Revisión del código generado, parte por parte, y lista de cambios para Claude Code: `docs/revision_codigo_mcc.md`. Sirve para comprobar nombres de registros y valores (por ejemplo, el registro de entrada PPS de RX1 se llama `RX1DTPPS` en el `.h`, aunque el datasheet lo llame `RX1PPS`).
+MCC: la persona indica que SÍ puede usarse (2026-10-19). El código generado en clase es la base de trabajo y se revisa parte por parte: `docs/revision_codigo_mcc.md`. Configuración: `docs/guia_mcc_referencia.md`. Ejemplo de nombres: el registro de entrada PPS de RX1 se llama `RX1DTPPS` en el `.h`, aunque el datasheet lo llame `RX1PPS`.
 
 ## Herramientas (versiones que usa el equipo)
 
@@ -40,7 +40,7 @@ Ese archivo es el enunciado de la práctica (qué pide el curso). Donde contradi
 
 ## Reglas del proyecto
 
-- C "bare-metal" escribiendo directamente en los registros (SFR). **No usar MCC.**
+- Se puede usar MCC como base (lo indica la persona; **el enunciado dice lo contrario, así que la persona lo confirma con el profesor**). Todo código de MCC se revisa y se entiende línea a línea antes de usarse, y lo que se cambie queda en `docs/revision_codigo_mcc.md`. El código que se agregue a mano es C escribiendo directamente en los registros (SFR).
 - Sin esperas bloqueantes en la lógica: nada de `while(!TXIF)` ni `__delay_ms` en el programa principal.
 - UART por interrupciones con FIFO circular. Protocolo binario, no ASCII.
 - Alimentación VCC = 3,7 V (fuente Keysight E36233A, según el preinforme). Conversor USB-serie a 3,3 V, nunca a 5 V.
@@ -65,6 +65,19 @@ Ese archivo es el enunciado de la práctica (qué pide el curso). Donde contradi
 - Fase 2: ADC de I/Q, PWM de auto-cero, máquina de estados.
 
 Cuando cambie una decisión de diseño (pines, baud, formato de trama), actualizar `docs/especificacion_diseno_uart.md`.
+
+## Cómo se explica el código (formato fijo)
+
+Para quien aprende el código línea a línea. Claude, Gemini o Claude Code explican **siempre así**, corto y sin repetir el datasheet:
+
+1. **Una parte a la vez.** Se abre con "Parte N de M" y el nombre. No se pasa a la siguiente hasta que la persona diga "entendido".
+2. **Abre:** archivo y función (ruta dentro de `firmware/Micro_Firmware.X/`) y, si viene de MCC, en qué módulo de MCC se configura.
+3. **Se encarga de:** una frase.
+4. **Lista:** tabla `nombre | qué es o significa | valor aquí`, un renglón por línea o registro, en el orden del código. Los bits del mismo registro van en una fila.
+5. **Cambiar:** el ID de `docs/revision_codigo_mcc.md`, o "nada".
+6. **Compruébalo:** una o dos preguntas.
+
+Reglas: máximo unos 25 renglones por parte. Nombres, valores y páginas salen del datasheet o del `.h`, nunca de memoria; lo no verificado se marca. Sin teoría que esa parte no use.
 
 ## Roles y flujo de trabajo
 
@@ -96,7 +109,7 @@ Propuesta inicial, tomada de "Siguiente paso" de `docs/estado.md`. Gemini la ref
 
 | ID | Tarea | Criterio de aceptación | Estado |
 |---|---|---|---|
-| T-01 | Mover el código de MCC a `referencia_mcc/` y dejar `main.c` vacío | El proyecto abre y compila en MPLAB X | propuesta |
+| T-01 | Mover el código de MCC a `referencia_mcc/` y dejar `main.c` vacío | El proyecto abre y compila en MPLAB X | en espera: la persona decide si MCC se queda en el firmware |
 | T-02 | `config.c` (bits de configuración) y `system_init()` con reloj de 16 MHz | Pruebas 0.2 a 0.5 de `docs/protocolos_prueba.md` | propuesta |
 | T-03 | `uart.c` y `uart.h`: buffers circulares, una sola ISR, `tx_DAT` y `tx_string`; eco en `main.c` | Pruebas 1.1 a 1.18 | propuesta |
 | T-04 | Protocolo de tramas con CRC-8 | Pruebas 2.1 a 2.8 | propuesta |

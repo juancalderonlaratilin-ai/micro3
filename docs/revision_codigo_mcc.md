@@ -4,7 +4,22 @@ Proyecto Micro 3 · Inicio: 2026-10-19 · Código revisado: `firmware/Micro_Firm
 
 > **Para qué sirve:** la persona repasa el código de MCC función por función hasta entender cada línea y cada registro. Lo que haya que cambiar queda registrado aquí con su motivo, para pasárselo a Claude Code. **Claude Code: implementa solo las filas con estado `aprobada`** (la persona las aprueba).
 >
-> **Cómo se usa:** una parte a la vez. Una parte pasa a `entendida` solo cuando la persona lo confirma. Las explicaciones se dan en el chat; aquí solo se guarda la ruta, las decisiones y los cambios.
+> **Cómo se usa:** una parte a la vez. Una parte pasa a `entendida` solo cuando la persona lo confirma. Las explicaciones se dan en el chat con el formato de `MASTER_PLAN.md` ("Cómo se explica el código"); aquí solo se guarda la ruta, las decisiones y los cambios.
+
+## Mapa: qué ventana de MCC genera qué archivo
+
+| Ventana o módulo de MCC | Qué configura | Archivo y función generados | Parte |
+|---|---|---|---|
+| System Module (`CONFIG1` a `CONFIG5`) | Bits de configuración | `device_config.c` | 1 |
+| System Module (arranque) | Orden de inicialización | `main.c`, `mcc.c`: `SYSTEM_Initialize()` | 2 |
+| PMD | Qué periféricos tienen reloj | `mcc.c`: `PMD_Initialize()` | 3 |
+| Pin Module (Pin Manager) | Pines, PPS, entrada/salida, analógico/digital | `pin_manager.c`: `PIN_MANAGER_Initialize()` | 4 |
+| Reloj (en el `.mc3` se llama `INTERNAL OSCILLATOR`) | Frecuencia del reloj | `mcc.c`: `OSCILLATOR_Initialize()` | 5 |
+| EUSART1 | UART: baud, buffers, interrupciones | `eusart1.c` y `eusart1.h` | 6, 8, 9, 10 |
+| Interrupt Module | Rutina de interrupción única | `interrupt_manager.c` y `.h` | 7 |
+| RESET, WWDT | Reset y watchdog | no vi archivos propios en el proyecto | — |
+
+Los nombres de módulo salen del `.mc3`; en qué pestaña de la ventana está cada casilla no lo he visto.
 
 ## Ruta (orden en que se ejecuta el código)
 
@@ -15,7 +30,7 @@ Proyecto Micro 3 · Inicio: 2026-10-19 · Código revisado: `firmware/Micro_Firm
 | 3 | `mcc.c`: `PMD_Initialize()` | pendiente |
 | 4 | `pin_manager.c`: `PIN_MANAGER_Initialize()` | pendiente |
 | 5 | `mcc.c`: `OSCILLATOR_Initialize()` | pendiente |
-| 6 | `eusart1.c`: `EUSART1_Initialize()` | pendiente |
+| 6 | `eusart1.c`: `EUSART1_Initialize()` (revisada antes que 2–5 por decisión de la persona; la UART también necesita las partes 4 y 5) | explicada, falta confirmación |
 | 7 | `interrupt_manager.c`: `INTERRUPT_InterruptManager()` | pendiente |
 | 8 | `eusart1.c`: `EUSART1_Write`, `EUSART1_Read`, `EUSART1_is_*` | pendiente |
 | 9 | `eusart1.c`: `EUSART1_Transmit_ISR()` | pendiente |
@@ -30,6 +45,7 @@ Estado: `propuesta` → `aprobada` (solo la persona) → `implementada, sin prob
 | C-01 | `device_config.c`, `PPS1WAY = ON` | `PPS1WAY = OFF` | Con ON el candado de PPS se puede abrir y cerrar **una sola vez**; un cambio posterior de pines (p. ej. al agregar el PWM) se ignora sin avisar. Con OFF no hay esa trampa (DS p.29) | T-02 | propuesta |
 | C-02 | `device_config.c`, `FCMEN = ON` | `FCMEN = OFF` | El monitor de reloj solo actúa con osciladores **externos** (DS §8.4, p.129). Con el HFINTOSC no hace nada; se quita para que la configuración no tenga líneas que no se entienden | T-02 | propuesta |
 | C-03 | `device_config.c`, todas las demás | Escribirlas igual en `config.c`, con comentarios en español, **todas** (XC8 exige todas) | Son las mismas que decidimos (ver `docs/especificacion_diseno_uart.md` §11) | T-02 | propuesta |
+| C-05 | `eusart1.c` líneas 56–57, `EUSART1_TX_BUFFER_SIZE` y `EUSART1_RX_BUFFER_SIZE` (en MCC: ventana EUSART1, tamaños de buffer por software) | TX = 64 y RX = 32 | Con 8 no cabe ni una trama y el margen es 0,6 ms. Motivos y cuentas: `docs/criterios_diseno.md` §6.1 | T-03 | propuesta |
 | C-04 | `device_config.c`, `WDTE = OFF` | Dejar OFF en desarrollo; decidir antes de entregar si se activa | Un watchdog reinicia el chip si el programa se cuelga; hoy lo desactivamos para depurar | T-02 | propuesta |
 
 ## Preguntas abiertas de la revisión
