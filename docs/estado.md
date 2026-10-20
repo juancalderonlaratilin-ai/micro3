@@ -54,7 +54,7 @@ En `firmware/Micro_Firmware.X` hay código **generado por MCC en clase**, que la
 1. La persona: *Clean and Build* en MPLAB X (anotar los warnings), programar con el SNAP y correr las pruebas 1.5, 1.6, 1.7, 1.9, 1.13 y 1.14 de `docs/protocolos_prueba.md` (guía: `docs/guia_prueba_uart_snap.md`). El resultado decide si T-03 pasa a `probada` o `bloqueada`.
 2. Decidir (planificador/persona): si se acepta que queden avisos `(520)` de funciones sin llamar (el criterio de T-03 dice "sin warnings"), y cómo se hacen las pruebas 1.9 y 1.14, que el eco no cubre (no llama a `tx_DAT` y `main` siempre lee el RX).
 3. Seguir la revisión del código de MCC (`docs/revision_codigo_mcc.md`), parte por parte. T-01 (mover MCC a `referencia_mcc/`) queda en espera.
-4. T-02: `config.c` (bits de configuración) y `system_init()` con el reloj a 16 MHz.
+4. T-02 (aprobada, reducida): Claude Code cambia en `device_config.c` `PPS1WAY = OFF` y `FCMEN = OFF`. Sin `config.c` nuevo; watchdog ya OFF.
 
 ## Registro de sesiones
 
@@ -67,4 +67,5 @@ En `firmware/Micro_Firmware.X` hay código **generado por MCC en clase**, que la
 | 2026-10-19 | Chat de Claude | Revisión del código de MCC parte por parte; parte 1 (bits de configuración) explicada; cambios C-01 a C-04 propuestos | Sin aprobar |
 | 2026-10-19 | Chat de Claude | Formato fijo para explicar código en `MASTER_PLAN.md`; mapa de ventanas de MCC a archivos; MCC permitido según la persona; T-01 en espera | Pendiente confirmar con el profesor |
 | 2026-10-19 | Chat de Claude | Instrucciones para Claude Code en `docs/instrucciones_claude_code_uart.md`; T-03 aprobada (C-06 a C-10) | Falta C-05 en MCC y la implementación |
+| 2026-10-19 | Chat de Claude | Pruebas UART con Python: 1.5 (20/20), 1.6 (256/256), 1.7 (1000/1000, 141 ms) pasaron; 1.18 y 0.3 pasaron (ID `0x30D2`, revisión `0x2002`). Detalle en `docs/resultados_pruebas_uart.md`. La persona aprobó C-01, C-02 y C-04 (watchdog apagado) y rechazó C-03; T-02 reducida y aprobada | Faltan 0.1, 1.4 y 1.17 (la persona los difiere). T-03 aún `implementada, sin probar` en 1.9, 1.13 y 1.14 |
 | 2026-10-19 | Claude Code | T-03 en 5 pasos revisados uno a uno: `eusart1.c/.h`, `interrupt_manager.c`, `main.c` de eco (C-06 a C-10). Buffers 64/32 ya presentes. Archivos en ISO-8859-1 con CRLF | `implementada, sin probar`. Compilación de prueba XC8 2.40: sin errores, 6 avisos (520). Sin MPLAB X ni chip. Sin commit |

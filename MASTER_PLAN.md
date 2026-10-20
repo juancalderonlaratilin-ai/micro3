@@ -111,7 +111,7 @@ Propuesta inicial, tomada de "Siguiente paso" de `docs/estado.md`. Gemini la ref
 | ID | Tarea | Criterio de aceptación | Estado |
 |---|---|---|---|
 | T-01 | Mover el código de MCC a `referencia_mcc/` y dejar `main.c` vacío | El proyecto abre y compila en MPLAB X | en espera: la persona decide si MCC se queda en el firmware |
-| T-02 | `config.c` (bits de configuración) y `system_init()` con reloj de 16 MHz | Pruebas 0.2 a 0.5 de `docs/protocolos_prueba.md` | propuesta |
+| T-02 | Reducida (2026-10-19): en `device_config.c` cambiar a mano `PPS1WAY = OFF` y `FCMEN = OFF` (C-01 y C-02 de `docs/revision_codigo_mcc.md`). Sin `config.c` nuevo (C-03 rechazada); el watchdog ya está apagado (C-04). El reloj de 16 MHz ya lo pone `mcc.c` | Compila; la UART sigue pasando 1.5, 1.6 y 1.7 de `docs/protocolos_prueba.md`; 0.4 y 0.5 cuando haya código de prueba | aprobada (2026-10-19) |
 | T-03 | Adaptar `eusart1.c`/`.h`, `interrupt_manager.c` y `main.c` (cambios C-06 a C-10 de `docs/revision_codigo_mcc.md`): sin esperas, buffers circulares sin contador, `tx_DAT` y `tx_string`, muy comentado. Instrucciones: `docs/instrucciones_claude_code_uart.md` | Compila sin warnings; pruebas 1.5, 1.6, 1.7, 1.9, 1.13 y 1.14 de `docs/protocolos_prueba.md` | aprobada (2026-10-19); requiere C-05 hecho en MCC |
 | T-04 | Protocolo de tramas con CRC-8 | Pruebas 2.1 a 2.8 | propuesta |
 
