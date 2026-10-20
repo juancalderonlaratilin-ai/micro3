@@ -63,14 +63,37 @@ void PIN_MANAGER_Initialize(void)
     /**
     TRISx registers
     */
-    TRISA = 0x3F;
+    /* [T-05 PRUEBA] ***** CÓDIGO DE PRUEBA: QUITAR ESTA PARTE PARA CONTINUAR CON LO DEMÁS *****
+     * Sirve solo para probar el parpadeo de 1 Hz del LED de RA5 (pruebas 0.5 y 1.12).
+     * Antes de seguir con las demás tareas hay que volver al valor de MCC: TRISA = 0x3F.
+     *
+     * TRISA = "Tri-State control del puerto A": un registro de 8 bits donde cada bit decide
+     * la dirección del pin RA0..RA5 (RA5 es el pin 2 del chip de 14 pines).
+     *   bit en 1 = el pin es ENTRADA   |   bit en 0 = el pin es SALIDA
+     * MCC dejaba 0x3F (0b00111111): RA0..RA5 todos entradas.
+     * Ahora 0x1F (0b00011111): el bit 5 pasa a 0, o sea RA5 es SALIDA (el LED); RA0..RA4 siguen
+     * como antes. LATA5 ya vale 0 (LATA = 0x00 arriba), así que el pin arranca en nivel bajo. */
+    TRISA = 0x1F;
     TRISC = 0x2F;
 
     /**
     ANSELx registers
     */
     ANSELC = 0x1F;
-    ANSELA = 0x37;
+    /* [T-05 PRUEBA] ***** CÓDIGO DE PRUEBA: QUITAR ESTA PARTE PARA CONTINUAR CON LO DEMÁS *****
+     * Antes de seguir con las demás tareas hay que volver al valor de MCC: ANSELA = 0x37.
+     *
+     * ANSELA = "Analog Select del puerto A": cada bit decide si el pin se usa como analógico.
+     *   bit en 1 = analógico (el pin NO sirve como salida/entrada digital normal)
+     *   bit en 0 = digital
+     * Al reset los pines están en analógico, y MCC dejaba 0x37 (0b00110111), con ANSA5 = 1
+     * (ANSA5 = bit 5 de ANSELA, el de RA5).
+     * Ahora 0x17 (0b00010111): solo el bit 5 pasa a 0, o sea RA5 digital. Los demás no cambian.
+     * Ojo: el LED prendería igual con ANSA5 = 1, porque ANSELA no afecta a las SALIDAS digitales
+     * (datasheet §14.4.6, p.191). Solo hace que las LECTURAS del pin den siempre 0 y puede dar
+     * resultados raros con instrucciones de leer-modificar-escribir sobre PORTA. Se baja el bit
+     * porque la regla del proyecto y T-05 lo piden para todo pin digital. */
+    ANSELA = 0x17;
 
     /**
     WPUx registers

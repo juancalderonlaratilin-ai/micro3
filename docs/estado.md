@@ -34,12 +34,11 @@ Proyecto Micro 3 · Última actualización: 2026-10-19
 
 En `firmware/Micro_Firmware.X` hay código **generado por MCC en clase**, que la persona indica que sí puede usarse como base (el enunciado dice que no: confirmar con el profesor). Se revisa en `docs/revision_codigo_mcc.md`.
 
-**T-03 implementada, sin probar** (cambios C-06 a C-10; C-05, buffers 64/32, ya estaba en `eusart1.c`):
-- `eusart1.c` / `eusart1.h`: buffers circulares con cabeza y cola (sin contadores), `EUSART1_Write` y `EUSART1_Read` sin espera (devuelven `bool`), `tx_DAT` (todo o nada) y `tx_string`, ISR de TX y de RX sin contador, `is_tx_done` con `TRMT`.
-- `interrupt_manager.c`: llama directo a `EUSART1_Transmit_ISR()` y `EUSART1_Receive_ISR()`.
-- `main.c`: eco con `PEIE`/`GIE` y `tx_string("Micro3 listo\r\n")` al arrancar.
-- Agregados que la instrucción no pedía: `#error` si un tamaño de buffer no es potencia de 2, `EUSART1_get_overflow()` (devuelve `bool`) y el contador `echoBytesLost` en `main.c`.
-- Compilación de prueba con XC8 2.40 por línea de comandos (salida fuera del proyecto): sin errores; 6 avisos `(520)` de funciones sin llamar (5 de `eusart1.c` y el de `PIN_MANAGER_IOC`, que ya existía). Sin compilar todavía en MPLAB X.
+Las tres tareas siguientes están **implementadas, sin probar**. Compilaciones de prueba con XC8 2.40 (línea de comandos y `make` del proyecto, salida fuera de la carpeta): cero errores. Sin compilar todavía en MPLAB X.
+
+- **T-03** (C-06 a C-10; C-05, buffers 64/32, ya estaba): `eusart1.c/.h` con buffers circulares sin contador, `Write`/`Read` sin espera, `tx_DAT` (todo o nada) y `tx_string`; `interrupt_manager.c` llama directo a las ISR; `main.c` hace eco y manda `Micro3 listo`. Agregados que la instrucción no pedía: `#error` si un buffer no es potencia de 2, `EUSART1_get_overflow()` y el contador `echoBytesLost`.
+- **T-02** (C-01, C-02): `device_config.c` con `PPS1WAY = OFF` y `FCMEN = OFF` (comprobado en el `.hex`). El `.mc3` sigue en ON/ON: **no pulsar *Generate*** en MCC.
+- **T-05, CÓDIGO DE PRUEBA (hay que quitarlo para continuar):** LED de RA5 a 1 Hz con Timer4 (interrupción cada 20 ms; 25 para invertir). Archivos nuevos `heartbeat.c/.h` (registrados a mano en `configurations.xml` y `Makefile-default.mk`) y cambios en `pin_manager.c` (`TRISA` = 0x1F, `ANSELA` = 0x17), `interrupt_manager.c` y `main.c`. Todo lleva la marca `[T-05 PRUEBA]` y `heartbeat.h` trae la lista "CÓMO QUITARLO". Cuentas y registros: `docs/notas_pic16f18426.md` §9.3. Resultado del `make`: 6 avisos `(520)` de funciones sin llamar (5 de `eusart1.c` y `PIN_MANAGER_IOC`, que ya existía); 622 de 16384 palabras de programa y 167 de 2048 bytes de datos.
 
 ## Sin confirmar
 
@@ -51,10 +50,10 @@ En `firmware/Micro_Firmware.X` hay código **generado por MCC en clase**, que la
 
 ## Siguiente paso
 
-1. La persona: *Clean and Build* en MPLAB X (anotar los warnings), programar con el SNAP y correr las pruebas 1.5, 1.6, 1.7, 1.9, 1.13 y 1.14 de `docs/protocolos_prueba.md` (guía: `docs/guia_prueba_uart_snap.md`). El resultado decide si T-03 pasa a `probada` o `bloqueada`.
-2. Decidir (planificador/persona): si se acepta que queden avisos `(520)` de funciones sin llamar (el criterio de T-03 dice "sin warnings"), y cómo se hacen las pruebas 1.9 y 1.14, que el eco no cubre (no llama a `tx_DAT` y `main` siempre lee el RX).
-3. Seguir la revisión del código de MCC (`docs/revision_codigo_mcc.md`), parte por parte. T-01 (mover MCC a `referencia_mcc/`) queda en espera.
-4. T-02 (aprobada, reducida): Claude Code cambia en `device_config.c` `PPS1WAY = OFF` y `FCMEN = OFF`. Sin `config.c` nuevo; watchdog ya OFF.
+1. La persona: cerrar y volver a abrir el proyecto en MPLAB X (hay archivos nuevos), *Clean and Build* (anotar los warnings), programar con el SNAP y correr las pruebas de `docs/protocolos_prueba.md` (guía: `docs/guia_prueba_uart_snap.md`). T-03: 1.5, 1.6, 1.7, 1.9, 1.13 y 1.14. T-02: repetir 1.5, 1.6 y 1.7. T-05: 0.5 y 1.12 (LED en RA5 y cronómetro), con 1.5, 1.6 y 1.7 mientras parpadea. El resultado decide `probada` o `bloqueada`.
+2. Decidir (planificador/persona): si se acepta que queden avisos `(520)` (el criterio de T-03 dice "sin warnings"); cómo se hacen 1.9 y 1.14, que el eco no cubre (no llama a `tx_DAT` y `main` siempre lee el RX); y cuándo se quita el código `[T-05 PRUEBA]`.
+3. Confirmar que la placa tiene un LED en RA5 ("Sin confirmar", punto 5); sin él no se miden 0.5 ni 1.12.
+4. Seguir la revisión del código de MCC (`docs/revision_codigo_mcc.md`), parte por parte. T-01 (mover MCC a `referencia_mcc/`) queda en espera. La prueba 0.4 (reloj) sigue sin código de prueba.
 
 ## Registro de sesiones
 
@@ -69,3 +68,5 @@ En `firmware/Micro_Firmware.X` hay código **generado por MCC en clase**, que la
 | 2026-10-19 | Chat de Claude | Instrucciones para Claude Code en `docs/instrucciones_claude_code_uart.md`; T-03 aprobada (C-06 a C-10) | Falta C-05 en MCC y la implementación |
 | 2026-10-19 | Chat de Claude | Pruebas UART con Python: 1.5 (20/20), 1.6 (256/256), 1.7 (1000/1000, 141 ms) pasaron; 1.18 y 0.3 pasaron (ID `0x30D2`, revisión `0x2002`). Detalle en `docs/resultados_pruebas_uart.md`. La persona aprobó C-01, C-02 y C-04 (watchdog apagado) y rechazó C-03; T-02 reducida y aprobada | Faltan 0.1, 1.4 y 1.17 (la persona los difiere). T-03 aún `implementada, sin probar` en 1.9, 1.13 y 1.14 |
 | 2026-10-19 | Claude Code | T-03 en 5 pasos revisados uno a uno: `eusart1.c/.h`, `interrupt_manager.c`, `main.c` de eco (C-06 a C-10). Buffers 64/32 ya presentes. Archivos en ISO-8859-1 con CRLF | `implementada, sin probar`. Compilación de prueba XC8 2.40: sin errores, 6 avisos (520). Sin MPLAB X ni chip. Sin commit |
+| 2026-10-19 | Claude Code | T-02 reducida: `device_config.c` con `PPS1WAY = OFF` y `FCMEN = OFF` y comentarios actualizados (C-01, C-02). Nada más cambió | `implementada, sin probar`. Compilación de prueba XC8 2.40: sin errores; el `.hex` muestra los dos bits en 0. Sin MPLAB X ni chip. Sin commit |
+| 2026-10-19 | Claude Code | T-05 en 4 pasos revisados uno a uno: RA5 como salida (`pin_manager.c`), Timer4 en `heartbeat.c/.h`, rama de TMR4 en `interrupt_manager.c` y llamada en `main.c`. Todo marcado `[T-05 PRUEBA]`. Datos verificados en `notas_pic16f18426.md` §3 y §9.3 | `implementada, sin probar`. `make` del proyecto: sin errores, 6 avisos (520). Ensamblador revisado (`T4CON` 0xF4, `T4CLKCON` 0x01, `T4PR` 124). Sin MPLAB X ni chip. Sin commit |

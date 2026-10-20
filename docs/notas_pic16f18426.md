@@ -76,6 +76,8 @@ Funciones relevantes (DS p.8, Tabla 3):
 
 **Canales ADC disponibles (11):** ANA0, ANA1, ANA2, ANA4, ANA5, ANC0–ANC5.
 
+**`ANSELx` (DS §14.4.6, p.191) [VERIFICADO en T-05]:** al reset todos sus bits valen 1 (pin analógico). Con el bit en 1 las lecturas digitales del pin dan siempre 0, pero **no afecta a las salidas digitales**: un pin con `TRIS` = 0 y `ANSEL` = 1 igual saca el nivel de `LAT`. Se baja en todo pin digital (regla del proyecto) y evita resultados raros al hacer leer-modificar-escribir sobre `PORTx`. **Nombre en C:** el datasheet lo llama `ANSELA5`, pero en `pic16f18426.h` el bit de RA5 es `ANSELAbits.ANSA5` (y `ANSELCbits.ANSC4` para RC4).
+
 ---
 
 ## 4. Oscilador
@@ -272,6 +274,24 @@ Ejemplo ⚠️: con Fosc = 16 MHz, `T2PR = 255`, prescaler 1:1 → período = 25
 
 12 bits (ADCC), 11 canales externos, FVR de 1,024 / 2,048 / 4,096 V. Registros que existen: `ADCON0–3`, `ADPCH`, `ADREF`, `ADCLK`, `ADACQ`, `ADPRE`, `ADCAP`, `ADRES`, `ADSTAT`, `ADACT`, `ADCNT`. **Pendiente** leer: tiempo de adquisición, alineación del resultado, disparo automático por Timer (`ADACT`) y referencia (`ADREF`). Con VDD = 3,7 V y I/Q centradas en ~1,85 V, cada cuenta vale ~0,9 mV (3,7 V / 4096) ⚠️.
 
+### 9.3 Timer2/4/6 (8 bits) como base de tiempo con interrupción [VERIFICADO en T-05]
+
+Los temporizadores pares (Timer2, 4 y 6) son el mismo módulo con los mismos registros: lo que dice el DS del Timer2 vale para los otros (DS cap. 20, p.285). En T-05 el parpadeo de prueba usa **Timer4** y deja Timer2 para el PWM del auto-cero.
+
+| Dato | Valor | Fuente |
+|---|---|---|
+| Direcciones (`pic16f18426.h`) | Timer2: `T2TMR` 0x28C, `T2PR` 0x28D, `T2CON` 0x28E, `T2HLT` 0x28F, `T2CLKCON` 0x290, `T2RST` 0x291. Timer4: las mismas seis, desde 0x292 hasta 0x297 (`T4CON` 0x294, `T4CLKCON` 0x296). El registro de período se llama `TxPR`, no `PRx` | .h |
+| `TxCON` | bit 7 `ON`; bits 6:4 `CKPS` (111 = 1:128); bits 3:0 `OUTPS` (0000 = 1:1 … 1111 = 1:16, o sea valor + 1) | DS §20.11, p.300–305 |
+| `TxCLKCON.CS` | `0001` = **Fosc/4**; `0010` = Fosc; **`0000` (el valor de reset) = el pin externo `TxCKIPPS`**, no el reloj del chip. Sin escribir `CS` el temporizador no cuenta | DS Tabla 20-3, p.305 |
+| Período | `TxTMR` sube hasta `TxPR` y a la cuenta siguiente vuelve a 0: **`TxPR` + 1 cuentas** | DS §20.1, p.286 |
+| Interrupción | se genera cuando el postscaler completa `OUTPS` + 1 coincidencias con `TxPR` | DS §20.4, p.287 |
+| Escribir `TxCON` | limpia prescaler y postscaler, pero **no** pone `TxTMR` en 0 | DS §20.1, p.286 |
+| Bandera | `PIR4bits.TMRxIF` "debe borrarse por software". Habilitación: `PIE4bits.TMRxIE`. Timer2 = bit 1, Timer4 = bit 3, Timer6 = bit 5 | DS p.116 (descripción de PIR4); .h |
+| Modo | `TxHLT` vale 0 al reset (`MODE` = 00000, compuerta por software): cuenta libre mientras `ON` = 1 | DS cap. 20, Fig. 20-3 |
+| `PMD1` | `mcc.c` lo deja en 0x00: todos los temporizadores tienen reloj | código del proyecto |
+
+Cuenta usada en `heartbeat.c` (código de prueba `[T-05 PRUEBA]`): Fosc 16 MHz → Fosc/4 = 4 MHz → prescaler 1:128 = 31 250 Hz → `T4PR` = 124 (125 cuentas = 4 ms) → postscaler 1:5 = una interrupción cada 20 ms → 25 interrupciones = 0,5 s → el LED de RA5 se invierte cada 0,5 s = parpadeo de 1 Hz. Es exacto con el reloj nominal; la exactitud real depende del oscilador (±2 %), que mide la prueba 0.4. Compilado y revisado en el ensamblador (`T4CON` = 0xF4, `T4CLKCON` = 0x01, `T4PR` = 124); **sin probar en el chip**.
+
 ---
 
 ## 10. Buenas prácticas de C para PIC (TB3261 y XC8)
@@ -308,7 +328,7 @@ Ejemplo ⚠️: con Fosc = 16 MHz, `T2PR = 255`, prescaler 1:1 → período = 25
 
 - Capítulo 7 (Interrupts): latencia exacta y registros `PIR*`/`PIE*` restantes.
 - ADCC (cap. 27): adquisición, justificación, disparo por Timer, tiempos de conversión.
-- Timer2 (cap. 20) y `CCPTMRS`.
+- Timer2 (cap. 20): leído para T-05, ver §9.3. Falta `CCPTMRS` y cómo comparten Timer2 los dos PWM.
 - IOC (cap. 15) para el pulsador de auto-cero.
 - Especificaciones de BOR (`VBOR`) para elegir `BORV` con VDD = 3,7 V.
 - `CONFIG5` (protección de código) y `PMD` (apagar periféricos sin uso).

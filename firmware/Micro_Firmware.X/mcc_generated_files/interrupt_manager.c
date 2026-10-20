@@ -48,6 +48,9 @@
 
 #include "interrupt_manager.h"
 #include "mcc.h"
+/* [T-05 PRUEBA] ***** CÓDIGO DE PRUEBA: QUITAR ESTA PARTE PARA CONTINUAR CON LO DEMÁS *****
+ * Declara Heartbeat_ISR(). heartbeat.h está una carpeta más arriba, junto a main.c. */
+#include "../heartbeat.h"
 
 void __interrupt() INTERRUPT_InterruptManager (void)
 {
@@ -63,7 +66,18 @@ void __interrupt() INTERRUPT_InterruptManager (void)
         {
             // [C-06] Llamada directa a la ISR de RX (antes: a través del puntero EUSART1_RxDefaultInterruptHandler)
             EUSART1_Receive_ISR();
-        } 
+        }
+        /* [T-05 PRUEBA] ***** CÓDIGO DE PRUEBA: QUITAR ESTA PARTE PARA CONTINUAR CON LO DEMÁS *****
+         * Rama del Timer4 del parpadeo de prueba. Se atiende solo si el aviso está habilitado Y la
+         * bandera está levantada (igual que las ramas de arriba): PIE4bits.TMR4IE (Peripheral
+         * Interrupt Enable 4, bit de Timer4) y PIR4bits.TMR4IF (Peripheral Interrupt Request 4,
+         * bandera que sube el hardware cada 20 ms). Va DESPUÉS de TX y RX: si coinciden, primero
+         * la UART (perder un byte recibido es peor que retrasar el LED unos microsegundos). Lo
+         * que quede pendiente vuelve a interrumpir apenas termine esta función. */
+        else if(PIE4bits.TMR4IE == 1 && PIR4bits.TMR4IF == 1)
+        {
+            Heartbeat_ISR();
+        }
         else
         {
             //Unhandled Interrupt

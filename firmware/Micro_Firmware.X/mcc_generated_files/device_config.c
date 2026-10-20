@@ -51,7 +51,7 @@
 #pragma config RSTOSC = HFINT1    // Power-up default value for COSC bits->HFINTOSC (1MHz)
 #pragma config CLKOUTEN = OFF    // Clock Out Enable bit->CLKOUT function is disabled; i/o or oscillator function on OSC2
 #pragma config CSWEN = ON    // Clock Switch Enable bit->Writing to NOSC and NDIV is allowed
-#pragma config FCMEN = ON    // Fail-Safe Clock Monitor Enable bit->FSCM timer enabled
+#pragma config FCMEN = OFF    // [C-02] Fail-Safe Clock Monitor Enable: monitor de fallo de reloj apagado. Solo vigila osciladores externos y aquí se usa el HFINTOSC interno, así que no hacía nada
 
 // CONFIG2
 #pragma config MCLRE = ON    // Master Clear Enable bit->MCLR pin is Master Clear function
@@ -60,7 +60,7 @@
 #pragma config BOREN = ON    // Brown-out reset enable bits->Brown-out Reset Enabled, SBOREN bit is ignored
 #pragma config BORV = LO    // Brown-out Reset Voltage Selection->Brown-out Reset Voltage (VBOR) set to 2.45V
 #pragma config ZCDDIS = OFF    // Zero-cross detect disable->Zero-cross detect circuit is disabled at POR.
-#pragma config PPS1WAY = ON    // Peripheral Pin Select one-way control->The PPSLOCK bit can be cleared and set only once in software
+#pragma config PPS1WAY = OFF    // [C-01] PPS One-Way Set Enable: el candado PPSLOCKED se puede quitar y poner varias veces (con la secuencia de desbloqueo). Con ON solo una vez y un cambio posterior de pines se ignoraba sin avisar
 #pragma config STVREN = ON    // Stack Overflow/Underflow Reset Enable bit->Stack Overflow or Underflow will cause a reset
 
 // CONFIG3

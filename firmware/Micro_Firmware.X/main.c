@@ -42,6 +42,9 @@
 */
 
 #include "mcc_generated_files/mcc.h"
+/* [T-05 PRUEBA] ***** CÓDIGO DE PRUEBA: QUITAR ESTA PARTE PARA CONTINUAR CON LO DEMÁS *****
+ * Declara Heartbeat_Initialize(), el parpadeo de 1 Hz del LED de RA5. */
+#include "heartbeat.h"
 
 /* [T-03] Cuenta los bytes que el eco no pudo devolver porque el buffer de TX estaba lleno.
  * Es "volatile" y global para poder verla en el depurador de MPLAB X (ventana Variables).
@@ -64,6 +67,14 @@ void main(void)
 
     // initialize the device
     SYSTEM_Initialize();
+
+    /* [T-05 PRUEBA] ***** CÓDIGO DE PRUEBA: QUITAR ESTA PARTE PARA CONTINUAR CON LO DEMÁS *****
+     * Arranca Timer4 y su interrupción (el LED de RA5 empezará a parpadear a 1 Hz cuando se
+     * enciendan PEIE y GIE, justo debajo). Va ANTES de esas dos líneas para que la primera
+     * interrupción no llegue con el temporizador a medio configurar. Es seguro llamarla aquí
+     * porque interrupt_manager.c ya atiende a Timer4 con Heartbeat_ISR(); si no lo hiciera, la
+     * bandera TMR4IF se quedaría en 1 y la interrupción se repetiría sin parar. */
+    Heartbeat_Initialize();
 
     // [T-03] Interrupciones: sin esto, la ISR nunca se ejecuta y nada se envía ni se recibe.
     // PEIE = Peripheral Interrupt Enable (bit de INTCON): deja pasar las interrupciones de los
