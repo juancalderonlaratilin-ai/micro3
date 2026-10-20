@@ -15,7 +15,8 @@ Proyecto Micro 3 · Primera sesión de pruebas: 2026-10-19 · Procedimiento: `do
 | Alimentación de la placa | 3,7 V (fuente de laboratorio) |
 | Adaptador USB-serie | módulo CP2102, puerto **COM6**; TX del PIC por divisor 1 kΩ + 2,2 kΩ |
 | Terminal | PuTTY, 115200 8N1, sin control de flujo, sin eco local |
-| Python / `prueba_uart.py` | todavía no instalado |
+| Tamaño del programa (Dashboard de MPLAB X) | Memoria de datos: 166 B de 2048 (8 %). Programa: 565 palabras de 16 384 (3 %). Checksum `0xC99F`, CRC32 `0xC7DC1207`. Optimización: *Disabled*. SNAP serie `BUR184673014` |
+| Python / `prueba_uart.py` | Python 3.12 + pyserial; `python herramientas\prueba_uart.py COM6` (PuTTY cerrado) |
 
 ## Pruebas hechas
 
@@ -25,7 +26,11 @@ Proyecto Micro 3 · Primera sesión de pruebas: 2026-10-19 · Procedimiento: `do
 | 0.2 | Programación con SNAP | *Make and Program Device* | **pasó** | La persona confirmó que cargó el código. No se copió el mensaje de MPLAB X |
 | 1.18 | Saludo tras el reinicio | Terminal abierta, se apaga y enciende la placa | **pasó** | Apareció `Micro3 listo`. Confirma también el reloj de 16 MHz y el baud de 115200 (si no, saldrían caracteres erróneos), las interrupciones y `tx_string` |
 | 1.5 | Eco de un byte (informal, con PuTTY) | Se escribió `hola` con y sin el cable RXD del adaptador | **pasó** | Con el cable puesto, `hola` volvió. Con el RXD desconectado no apareció nada, así que el eco venía del PIC y no de PuTTY |
+| 1.5 | Eco de 1 byte (formal, script) | `prueba_uart.py COM6`, byte 0x41 | **pasó**, 20/20 | Criterio 20/20 (2026-10-19) |
+| 1.6 | Los 256 valores | `prueba_uart.py COM6`, de 0x00 a 0xFF uno por uno | **pasó**, 256/256 | Criterio 256/256. Los datos binarios pasan sin alterarse (incluye 0x00, 0x0D, 0x0A y 0xFF) |
+| 1.7 | Ráfaga de 1000 bytes | `prueba_uart.py COM6`, 1000 bytes seguidos | **pasó**, 1000/1000 iguales | Tardó 141 ms (mínimo teórico 87 ms). La diferencia es la latencia del USB y del PC, no pérdida. Sin pérdida con el buffer RX de 32 bytes |
 | — | Ráfaga aproximada | Se pegó un texto de unos 400 caracteres en PuTTY | **pasó** a simple vista | Volvió completo, con acentos. No se comparó byte a byte. La segunda pegada seguida está por confirmar |
+| 0.3 | Identificación del chip | MPLAB X → *Window > Dashboard* → *Refresh Debug Tool Status* | **pasó** | Device Id `0x30D2` (coincide con PIC16F18426). Device Id Revision `0x2002`. SNAP: Boot Version 01.01.55. La hoja de erratas consultada (80000799C) solo documenta la revisión A1 (`0x8005`) y no lista `0x2002`, así que no sé qué letra corresponde. Esa hoja no trae erratas de UART, oscilador ni PPS. Corrección: antes se había escrito "A4, 0x2004" como esperado y no estaba verificado |
 
 ## Observaciones sin número de prueba
 
@@ -37,11 +42,7 @@ Proyecto Micro 3 · Primera sesión de pruebas: 2026-10-19 · Procedimiento: `do
 | ID | Qué falta | Nota |
 |---|---|---|
 | 0.1 | Medir VDD en los pines 1 y 14 del PIC | Esperado 3,6 a 3,8 V |
-| 0.3 | Revisión de silicio (MPLAB X → *Window > Dashboard*) | Esperada A4 (ID `0x2004`) |
 | 0.6 | Consumo de corriente | Anotar el valor |
 | 1.1 a 1.4 | Capa física con osciloscopio y multímetro (1.4: nivel en RC5 ≥ 1,73 V) | La 1.4 se puede hacer ya con el multímetro |
-| 1.5 formal | 20 de 20 con el script | Necesita Python |
-| 1.6 | Los 256 valores | Necesita Python |
-| 1.7 | Ráfaga exacta de 1000 bytes (≥ 87 ms) | Necesita Python |
 | 1.17 | Desconectar y reconectar el USB | Se puede hacer ya con PuTTY |
 | 0.4, 0.5, 1.9 a 1.13, 1.15, 1.16 | Falta código de prueba (LED, pin RC2, contadores visibles, versión sin lectura) | Ver `docs/guia_prueba_uart_snap.md` |

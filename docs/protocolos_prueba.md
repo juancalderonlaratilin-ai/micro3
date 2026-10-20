@@ -35,7 +35,7 @@ Proyecto Micro 3 · Fecha: 2026-10-16 · Borrador v1
 |---|---|---|---|---|---|
 | 0.1 | Alimentación | Con la fuente en 3,7 V y límite de corriente bajo, medir VDD en los pines 1 y 14 del PIC, sin el PIC programado | 3,7 V | VDD entre 3,6 y 3,8 V | |
 | 0.2 | Programación | Conectar el SNAP y programar un `main` mínimo | Programa sin errores | MPLAB X termina con "Programming complete" | |
-| 0.3 | Revisión de silicio | MPLAB X → *Window > Dashboard* | Anotar la revisión (A4 esperada, ID 0x2004) | Anotada en este documento | |
+| 0.3 | Revisión de silicio | MPLAB X → *Window > Dashboard* | Device ID = 0x30D2 (PIC16F18426) y anotar la revisión | ID correcto y revisión anotada. Medido 2026-10-19: ID 0x30D2, revisión 0x2002 (ver `docs/resultados_pruebas_uart.md`) | pasó |
 | 0.4 | Reloj del sistema | Código de prueba que invierte RC2 en un bucle con Timer, o con `CLKOUTEN` activado se mide Fosc/4 en RA4 (RA4 queda libre en la Fase 1) | Fosc/4 = 4 MHz | 4 MHz ± 2 % (3,92 a 4,08 MHz) | |
 | 0.5 | LED de estado | Heartbeat a 1 Hz en RA5 | Parpadeo 1 Hz | Medido con cronómetro: 1 s ± 5 % | |
 | 0.6 | Consumo | Medir la corriente de la fuente con el firmware de la Fase 1 | Anotar | Sin cortocircuito. Valor registrado | |
