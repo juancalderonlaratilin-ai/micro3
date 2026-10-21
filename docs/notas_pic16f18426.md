@@ -290,7 +290,7 @@ Los temporizadores pares (Timer2, 4 y 6) son el mismo módulo con los mismos reg
 | Modo | `TxHLT` vale 0 al reset (`MODE` = 00000, compuerta por software): cuenta libre mientras `ON` = 1 | DS cap. 20, Fig. 20-3 |
 | `PMD1` | `mcc.c` lo deja en 0x00: todos los temporizadores tienen reloj | código del proyecto |
 
-Cuenta usada en `heartbeat.c` (código de prueba `[T-05 PRUEBA]`): Fosc 16 MHz → Fosc/4 = 4 MHz → prescaler 1:128 = 31 250 Hz → `T4PR` = 124 (125 cuentas = 4 ms) → postscaler 1:5 = una interrupción cada 20 ms → 25 interrupciones = 0,5 s → el LED de RA5 se invierte cada 0,5 s = parpadeo de 1 Hz. Es exacto con el reloj nominal; la exactitud real depende del oscilador (±2 %), que mide la prueba 0.4. Compilado y revisado en el ensamblador (`T4CON` = 0xF4, `T4CLKCON` = 0x01, `T4PR` = 124); **sin probar en el chip**.
+Cuenta que se usó en T-05 (código ya retirado el 2026-10-21): Fosc 16 MHz → Fosc/4 = 4 MHz → prescaler 1:128 = 31 250 Hz → `T4PR` = 124 (125 cuentas = 4 ms) → postscaler 1:5 = una interrupción cada 20 ms → 25 interrupciones = 0,5 s → el LED de RA5 se invierte cada 0,5 s = parpadeo de 1 Hz. Es exacto con el reloj nominal; la exactitud real depende del oscilador (±2 %), que mide la prueba 0.4. Compilado y revisado en el ensamblador (`T4CON` = 0xF4, `T4CLKCON` = 0x01, `T4PR` = 124); **sin probar en el chip**.
 
 ---
 

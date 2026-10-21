@@ -1,0 +1,206 @@
+{
+  ".gemini/settings.json": {
+    "mtime": 1792437569.567614,
+    "seen": 1792600128.0659142,
+    "ast_hash": "fb5039533b15b1c3033e3b0906c3daf3",
+    "semantic_hash": "fb5039533b15b1c3033e3b0906c3daf3"
+  },
+  ".mcp.json": {
+    "mtime": 1792430120.2047596,
+    "seen": 1792600128.0659142,
+    "ast_hash": "aef030e8b845f07cd6723f805b47332b",
+    "semantic_hash": "aef030e8b845f07cd6723f805b47332b"
+  },
+  "firmware/Micro_Firmware.X/heartbeat.c": {
+    "mtime": 1792457512.6657379,
+    "seen": 1792600128.0659142,
+    "ast_hash": "c1acb6c48f17132cd22b39a3ac012d5d",
+    "semantic_hash": "c1acb6c48f17132cd22b39a3ac012d5d"
+  },
+  "firmware/Micro_Firmware.X/heartbeat.h": {
+    "mtime": 1792457428.889374,
+    "seen": 1792600128.0659142,
+    "ast_hash": "5535414a3d0f61614f9799f50266f6c4",
+    "semantic_hash": "5535414a3d0f61614f9799f50266f6c4"
+  },
+  "firmware/Micro_Firmware.X/main.c": {
+    "mtime": 1792457512.6545687,
+    "seen": 1792600128.0659142,
+    "ast_hash": "f264be24684680b250a24b9e1fc42477",
+    "semantic_hash": "f264be24684680b250a24b9e1fc42477"
+  },
+  "firmware/Micro_Firmware.X/mcc_generated_files/device_config.c": {
+    "mtime": 1792455824.7140927,
+    "seen": 1792600128.0659142,
+    "ast_hash": "6f8ef5f0de681fe4e6cf7b213290197e",
+    "semantic_hash": "6f8ef5f0de681fe4e6cf7b213290197e"
+  },
+  "firmware/Micro_Firmware.X/mcc_generated_files/device_config.h": {
+    "mtime": 1792444839.318975,
+    "seen": 1792600128.0659142,
+    "ast_hash": "2b34a3ef4c7e988df34d9c232541f992",
+    "semantic_hash": "2b34a3ef4c7e988df34d9c232541f992"
+  },
+  "firmware/Micro_Firmware.X/mcc_generated_files/eusart1.c": {
+    "mtime": 1792450545.9778147,
+    "seen": 1792600128.0659142,
+    "ast_hash": "0e876745a6294a550dc829db5df72c1b",
+    "semantic_hash": "0e876745a6294a550dc829db5df72c1b"
+  },
+  "firmware/Micro_Firmware.X/mcc_generated_files/eusart1.h": {
+    "mtime": 1792451195.2835014,
+    "seen": 1792600128.0659142,
+    "ast_hash": "9ec3aebad2b8f4521f6ee37387d121ed",
+    "semantic_hash": "9ec3aebad2b8f4521f6ee37387d121ed"
+  },
+  "firmware/Micro_Firmware.X/mcc_generated_files/interrupt_manager.c": {
+    "mtime": 1792457428.894454,
+    "seen": 1792600128.0659142,
+    "ast_hash": "0afaccae06cecf8c46d82476e3342255",
+    "semantic_hash": "0afaccae06cecf8c46d82476e3342255"
+  },
+  "firmware/Micro_Firmware.X/mcc_generated_files/interrupt_manager.h": {
+    "mtime": 1792180665.0345037,
+    "seen": 1792600128.0659142,
+    "ast_hash": "180b014c33b0986642af6b7db37d080d",
+    "semantic_hash": "180b014c33b0986642af6b7db37d080d"
+  },
+  "firmware/Micro_Firmware.X/mcc_generated_files/mcc.c": {
+    "mtime": 1792444839.2398748,
+    "seen": 1792600128.0659142,
+    "ast_hash": "c363c9fb3e249f89570982ef114dc082",
+    "semantic_hash": "c363c9fb3e249f89570982ef114dc082"
+  },
+  "firmware/Micro_Firmware.X/mcc_generated_files/mcc.h": {
+    "mtime": 1792180665.0693264,
+    "seen": 1792600128.0659142,
+    "ast_hash": "60c1153c8da004cbcebb2fe9d35d9290",
+    "semantic_hash": "60c1153c8da004cbcebb2fe9d35d9290"
+  },
+  "firmware/Micro_Firmware.X/mcc_generated_files/pin_manager.c": {
+    "mtime": 1792457145.9554656,
+    "seen": 1792600128.0659142,
+    "ast_hash": "b96b51d721b75183512f4b468346b767",
+    "semantic_hash": "b96b51d721b75183512f4b468346b767"
+  },
+  "firmware/Micro_Firmware.X/mcc_generated_files/pin_manager.h": {
+    "mtime": 1792180141.9288633,
+    "seen": 1792600128.0659142,
+    "ast_hash": "d3e931d66e7182173788e5d33a979b08",
+    "semantic_hash": "d3e931d66e7182173788e5d33a979b08"
+  },
+  "herramientas/prueba_uart.py": {
+    "mtime": 1792449615.5894487,
+    "seen": 1792600128.0659142,
+    "ast_hash": "4310fb20ced2326fc454a69494a37dd0",
+    "semantic_hash": "4310fb20ced2326fc454a69494a37dd0"
+  },
+  "CLAUDE.md": {
+    "mtime": 1792449261.0342877,
+    "seen": 1792600128.0659142,
+    "ast_hash": "1030590819aac7f3878a664d64f4bc79",
+    "semantic_hash": "1030590819aac7f3878a664d64f4bc79"
+  },
+  "GEMINI.md": {
+    "mtime": 1792441035.1949103,
+    "seen": 1792600128.0659142,
+    "ast_hash": "84fda93a256755ba5815e72b148d952a",
+    "semantic_hash": "84fda93a256755ba5815e72b148d952a"
+  },
+  "MASTER_PLAN.md": {
+    "mtime": 1792457616.1339064,
+    "seen": 1792600128.0659142,
+    "ast_hash": "5c96f131d2bf166229bdf4902b0bc173",
+    "semantic_hash": "5c96f131d2bf166229bdf4902b0bc173"
+  },
+  "docs/Especificacion_Tecnica_Practica3_Microcontroladores.md": {
+    "mtime": 1792441142.8045928,
+    "seen": 1792600128.0659142,
+    "ast_hash": "7fbca597f34c1166a4a9598ed893bcd2",
+    "semantic_hash": "7fbca597f34c1166a4a9598ed893bcd2"
+  },
+  "docs/criterios_diseno.md": {
+    "mtime": 1792445128.593116,
+    "seen": 1792600128.0659142,
+    "ast_hash": "785f8fe4fe7d2740466050189ddfbeb9",
+    "semantic_hash": "785f8fe4fe7d2740466050189ddfbeb9"
+  },
+  "docs/especificacion_diseno_uart.md": {
+    "mtime": 1792445128.898732,
+    "seen": 1792600128.0659142,
+    "ast_hash": "a213b821baadcccfcf5cf8870da0bf03",
+    "semantic_hash": "a213b821baadcccfcf5cf8870da0bf03"
+  },
+  "docs/estado.md": {
+    "mtime": 1792457610.2819881,
+    "seen": 1792600128.0659142,
+    "ast_hash": "0c1305837f0e85b4b4bca2a08ba1af07",
+    "semantic_hash": "0c1305837f0e85b4b4bca2a08ba1af07"
+  },
+  "docs/guia_mcc_referencia.md": {
+    "mtime": 1792444963.520648,
+    "seen": 1792600128.0659142,
+    "ast_hash": "4336a60566d669024ad3c25add485d17",
+    "semantic_hash": "4336a60566d669024ad3c25add485d17"
+  },
+  "docs/guia_prueba_uart_snap.md": {
+    "mtime": 1792449620.3933108,
+    "seen": 1792600128.0659142,
+    "ast_hash": "1cfb105888cef5f4497c094abd05c523",
+    "semantic_hash": "1cfb105888cef5f4497c094abd05c523"
+  },
+  "docs/instrucciones_claude_code_uart.md": {
+    "mtime": 1792449260.742744,
+    "seen": 1792600128.0659142,
+    "ast_hash": "d2121b9b03ee6bccc810c57b9e44005e",
+    "semantic_hash": "d2121b9b03ee6bccc810c57b9e44005e"
+  },
+  "docs/notas_pic16f18426.md": {
+    "mtime": 1792457573.8028874,
+    "seen": 1792600128.0659142,
+    "ast_hash": "bdcc977341a661bbd25017b1ddd51d99",
+    "semantic_hash": "bdcc977341a661bbd25017b1ddd51d99"
+  },
+  "docs/prompt_claude_code.md": {
+    "mtime": 1792449620.683714,
+    "seen": 1792600128.0659142,
+    "ast_hash": "aaa2a51a71699326f67c0df13cb1209b",
+    "semantic_hash": "aaa2a51a71699326f67c0df13cb1209b"
+  },
+  "docs/protocolos_prueba.md": {
+    "mtime": 1792455364.9850824,
+    "seen": 1792600128.0659142,
+    "ast_hash": "135e57e3c25567e24ecd96913e07254a",
+    "semantic_hash": "135e57e3c25567e24ecd96913e07254a"
+  },
+  "docs/resultados_pruebas_uart.md": {
+    "mtime": 1792458402.5997036,
+    "seen": 1792600128.0659142,
+    "ast_hash": "7b9dfa1718d5f57299c72a50bb588e9c",
+    "semantic_hash": "7b9dfa1718d5f57299c72a50bb588e9c"
+  },
+  "docs/revision_codigo_mcc.md": {
+    "mtime": 1792455875.785548,
+    "seen": 1792600128.0659142,
+    "ast_hash": "24a4a7f300ac8669370df3e95ad23914",
+    "semantic_hash": "24a4a7f300ac8669370df3e95ad23914"
+  },
+  "docs/Preinforme Practica 2 Final- Sofia Aguilar_Sebastian Calderon_ Samuel Martinez.pdf": {
+    "mtime": 1792168378.5408204,
+    "seen": 1792600128.0659142,
+    "ast_hash": "8aeda80bb8fddd676f4d96aad3edb887",
+    "semantic_hash": "8aeda80bb8fddd676f4d96aad3edb887"
+  },
+  "docs/circuito_uart.png": {
+    "mtime": 1792188783.0535612,
+    "seen": 1792600128.0659142,
+    "ast_hash": "c7381129811e6d90cdf3fa5482f0538e",
+    "semantic_hash": "c7381129811e6d90cdf3fa5482f0538e"
+  },
+  "docs/circuito_uart.svg": {
+    "mtime": 1792188780.1298666,
+    "seen": 1792600128.0659142,
+    "ast_hash": "2ef9f0fa77dc14ed528e0b4a405a31a8",
+    "semantic_hash": "2ef9f0fa77dc14ed528e0b4a405a31a8"
+  }
+}
