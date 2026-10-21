@@ -42,6 +42,13 @@
 */
 
 #include "mcc_generated_files/mcc.h"
+/* [T-04] Declara protocol_init() y protocol_task(), el protocolo de tramas con CRC-8. */
+#include "protocol.h"
+
+/* [T-04] MODO_ECO: 1 = el programa devuelve cada byte tal cual llega (eco crudo, para repetir
+ * las pruebas 1.5, 1.6 y 1.7 del Módulo 1). 0 = el programa atiende el protocolo de tramas
+ * (Módulo 2). Se cambia aquí y se vuelve a compilar. */
+#define MODO_ECO 0
 
 /* [T-03] Cuenta los bytes que el eco no pudo devolver porque el buffer de TX estaba lleno.
  * Es "volatile" y global para poder verla en el depurador de MPLAB X (ventana Variables).
@@ -60,7 +67,9 @@ volatile uint8_t echoBytesLost = 0;
 */
 void main(void)
 {
+#if MODO_ECO
     uint8_t b; // el byte que se acaba de leer de la UART
+#endif
 
     // initialize the device
     SYSTEM_Initialize();
@@ -78,9 +87,13 @@ void main(void)
     // (no pasa: son 14 bytes y caben 63), devolvería false y no se enviaría nada.
     tx_string("Micro3 listo\r\n");
 
+    /* [T-04] Deja el protocolo en reposo, esperando el primer byte de una trama. */
+    protocol_init();
+
     // Bucle infinito del programa. Cada vuelta es muy corta porque nada espera.
     while (1)
     {
+#if MODO_ECO
         // [T-03] EUSART1_Read devuelve true solo si había un byte esperando en el buffer de RX
         // (y lo deja en b). Si no hay nada devuelve false al instante y el bucle sigue.
         if (EUSART1_Read(&b))
@@ -93,6 +106,10 @@ void main(void)
                 echoBytesLost++;
             }
         }
+#else
+        // [T-04] Atiende los bytes que lleguen: los junta en tramas y responde (PING -> PONG).
+        protocol_task();
+#endif
     }
 }
 /**
