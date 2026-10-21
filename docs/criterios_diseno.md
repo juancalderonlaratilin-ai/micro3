@@ -242,7 +242,7 @@ Fuente de los niveles del CP2102: datasheet del CP2102-GMR (Silicon Labs), secci
 3. Marcado exacto del chip del módulo CP2102 y si tiene jumper de nivel.
 4. Que el chip del PIC sea el `PIC16F18426` y no el `PIC16LF18426` (máximo 3,6 V).
 5. Que el PIC se alimente de los 3,7 V de la placa.
-6. CRC-8 o XOR, y la lista final de tipos de trama.
+6. ~~CRC-8 o XOR~~ (resuelto el 2026-10-21: CRC-8, ver §10). Falta la lista final de tipos de trama.
 7. Revisión de silicio (MPLAB X → Dashboard).
 8. Valor `VBOR` del brown-out (el MCC de clase usó `BORV = LO`, 2,45 V).
 
@@ -258,3 +258,6 @@ Fuente de los niveles del CP2102: datasheet del CP2102-GMR (Silicon Labs), secci
 | 2026-10-16 | `RX1PPS` es `RX1DTPPS` en el `.h` de XC8 | Visto en el código generado por MCC |
 | 2026-10-16 | TX del PIC pasa por un divisor | El datasheet del CP2102-GMR no describe sus entradas como tolerantes a 5 V, y el máximo es VIO + 0,5 V. Antes se suponía que sí toleraban 5 V |
 | 2026-10-19 | Documentados los motivos del tamaño de los buffers (§6.1): RX 32, TX 64, potencia de 2, comportamiento al llenarse | La revisión de `eusart1.c` de MCC mostró que 8 bytes no cubren una trama y que su RX no controla el desborde |
+| 2026-10-21 | Verificación de tramas con **CRC-8** (polinomio `0x07`, inicial `0x00`, sin reflejo, sobre los bytes 2 a 7). Se descarta el XOR. Formato en `docs/especificacion_protocolo.md` | Decisión de la persona. Cierra el pendiente 6 de §9 en lo que toca al CRC |
+| 2026-10-21 | El PWM de auto-cero usa los **10 bits directos** (sin dithering ni divisor); el residuo de hasta ±20 cuentas se resta después por software. Detalle y motivos en `docs/especificacion_pwm.md` §2 y §9 (D-1) | Decisión de la persona; paso de 3,61 mV en I0 y 36 mV en la salida |
+| 2026-10-21 | El cálculo del filtro RC del PWM (valores de R y C) se **aplaza** | Decisión de la persona; T-06 no lo necesita para empezar |

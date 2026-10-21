@@ -6,7 +6,7 @@
 
 El planificador es Gemini. Tú implementas. Los roles y el flujo están en "Roles y flujo de trabajo" de `MASTER_PLAN.md`.
 
-- Implementa solo las tareas de "Tareas" (en `MASTER_PLAN.md`) con estado `aprobada`, de una en una. **Ahora: T-03**, con el detalle en `docs/instrucciones_claude_code_uart.md`.
+- Implementa solo las tareas de "Tareas" (en `MASTER_PLAN.md`) con estado `aprobada`, de una en una. **Ahora: T-04**, con el detalle en `docs/especificacion_protocolo.md` (T-03 y T-02 ya están implementadas; falta que la persona las pruebe en el chip). Después, T-06 y T-07 (`docs/especificacion_pwm.md`), cuando la persona las apruebe.
 - Si una tarea contradice la especificación (`docs/`) o el enunciado, **detente**: no lo resuelvas por tu cuenta. Anota la duda en "Preguntas para el planificador" y avisa a la persona.
 - No cambies decisiones de diseño (pines, baud, formato de trama, reloj). Si crees que hay que cambiarlas, propón el cambio en "Cambios propuestos" y no lo apliques.
 - Escribe código en `firmware/`. Puedes editar `docs/estado.md`, `docs/notas_pic16f18426.md` y el estado de las filas de `docs/revision_codigo_mcc.md`. No reescribas el plan de Gemini.

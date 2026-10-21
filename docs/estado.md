@@ -1,6 +1,6 @@
 # Estado del proyecto (bitácora de avance)
 
-Proyecto Micro 3 · Última actualización: 2026-10-19
+Proyecto Micro 3 · Última actualización: 2026-10-21
 
 > **Para qué sirve:** es lo primero que se lee al abrir una sesión nueva (Claude Code lo carga desde `CLAUDE.md`; en el chat de Claude se le pide "lee `docs/estado.md`"). Dice **dónde quedó el trabajo y qué sigue**. Las decisiones y sus motivos viven en `criterios_diseno.md`, no aquí.
 >
@@ -51,7 +51,7 @@ Las dos tareas siguientes están **implementadas, sin probar**. Compilaciones de
 ## Siguiente paso
 
 1. La persona: cerrar y volver a abrir el proyecto en MPLAB X (se quitaron `heartbeat.c/.h`), *Clean and Build* (anotar los warnings), programar con el SNAP y correr las pruebas de `docs/protocolos_prueba.md` (guía: `docs/guia_prueba_uart_snap.md`). T-03: 1.5, 1.6, 1.7, 1.9, 1.13 y 1.14. T-02: repetir 1.5, 1.6 y 1.7. El resultado decide `probada` o `bloqueada`.
-2. Decidir (planificador/persona): si se acepta que queden avisos `(520)` (el criterio de T-03 dice "sin warnings"); cómo se hacen 1.9 y 1.14, que el eco no cubre (no llama a `tx_DAT` y `main` siempre lee el RX); y cuál es el siguiente módulo (PWM o ADC, el que resulte más sencillo).
+2. Decidir (planificador/persona): si se acepta que queden avisos `(520)` (el criterio de T-03 dice "sin warnings"); cómo se hacen 1.9 y 1.14, que el eco no cubre (no llama a `tx_DAT` y `main` siempre lee el RX); y el siguiente módulo, que ya se decidió el 2026-10-21: **T-04** (protocolo con CRC-8, aprobada) y después T-06/T-07 (PWM, propuestas). Ver `MASTER_PLAN.md`, `docs/especificacion_protocolo.md` y `docs/especificacion_pwm.md`.
 3. Pruebas 0.5 y 1.12 (LED en RA5): sin hacer hasta que haya otro código de prueba.
 4. Seguir la revisión del código de MCC (`docs/revision_codigo_mcc.md`), parte por parte. T-01 (mover MCC a `referencia_mcc/`) queda en espera. La prueba 0.4 (reloj) sigue sin código de prueba.
 
@@ -71,3 +71,4 @@ Las dos tareas siguientes están **implementadas, sin probar**. Compilaciones de
 | 2026-10-19 | Claude Code | T-02 reducida: `device_config.c` con `PPS1WAY = OFF` y `FCMEN = OFF` y comentarios actualizados (C-01, C-02). Nada más cambió | `implementada, sin probar`. Compilación de prueba XC8 2.40: sin errores; el `.hex` muestra los dos bits en 0. Sin MPLAB X ni chip. Sin commit |
 | 2026-10-19 | Claude Code | T-05 en 4 pasos revisados uno a uno: RA5 como salida (`pin_manager.c`), Timer4 en `heartbeat.c/.h`, rama de TMR4 en `interrupt_manager.c` y llamada en `main.c`. Todo marcado `[T-05 PRUEBA]`. Datos verificados en `notas_pic16f18426.md` §3 y §9.3 | `implementada, sin probar`. `make` del proyecto: sin errores, 6 avisos (520). Ensamblador revisado (`T4CON` 0xF4, `T4CLKCON` 0x01, `T4PR` 124). Sin MPLAB X ni chip. Sin commit |
 | 2026-10-21 | Claude Code | Retirado el código de T-05 (heartbeat): archivos borrados, referencias quitadas de `main.c`, `interrupt_manager.c`, `pin_manager.c`, `configurations.xml` y `Makefile-default.mk` | Compila con XC8 2.40 (6 avisos 520). Sin MPLAB X ni chip. Sin commit |
+| 2026-10-21 | Chat de Claude | Especificaciones `docs/especificacion_pwm.md` y `docs/especificacion_protocolo.md` (pines, eventos, tareas, pruebas). Tareas T-04 (aprobada), T-06, T-07 y T-08 (propuestas) y cambios CP-1 a CP-5 en `MASTER_PLAN.md`. Decisiones de la persona anotadas en `criterios_diseno.md` §10 | Solo documentos, sin código. Faltan en el chip las pruebas de T-02 y T-03 |
