@@ -1,6 +1,6 @@
 # Criterios de diseño y valores escogidos
 
-Proyecto Micro 3 · Enlace UART PC ↔ PIC (Fase 1) · Fecha: 2026-10-16
+Proyecto Micro 3 · Enlace UART PC ↔ PIC (Fase 1) · Fecha: 2026-10-16 · Actualizado: 2026-10-30 (ADC, §11)
 
 > **Para qué sirve:** explicar **por qué** se escogió cada valor (reloj, baud, formato, pines, niveles, buffers, protocolo), qué alternativas se descartaron y qué falta confirmar. El detalle técnico y las páginas del datasheet están en `especificacion_diseno_uart.md` y `notas_pic16f18426.md`. Las pruebas están en `protocolos_prueba.md`.
 >
@@ -26,7 +26,11 @@ Proyecto Micro 3 · Enlace UART PC ↔ PIC (Fase 1) · Fecha: 2026-10-16
 | 12 | Adaptador USB-serie | Módulo CP2102 (TTL) con el nivel lógico en 3,3 V | por confirmar el módulo |
 | 13 | Conexión PIC → adaptador | Divisor 1 kΩ + 2,2 kΩ en el TX del PIC | [PROPUESTA] |
 | 14 | Visualización I vs Q | En el PC (LabVIEW o Python), por UART | decidido |
-| 15 | Referencia del ADC (Fase 2) | VDD = 3,7 V | por confirmar en el capítulo del ADC |
+| 15 | Referencia del ADC (Fase 2) | VDD = 3,7 V (`ADREF = 0x00`) | en el código; falta confirmar con el profesor |
+| 16 | Muestreo del ADC | 1 kHz, disparado por Timer0 (hardware); I y Q convertidos en ráfaga dentro de 1 ms | profesor; código T-09 sin probar. Motivos en §11 |
+| 17 | Promedio del ADC | 5 pares (200 pares/s hacia el PC) | decisión D-1 del código [PROPUESTA] |
+| 18 | Canales del ADC | I = RC0 y Q = RC1, un solo ADC multiplexado | decidido |
+| 19 | **SINAD del ADC** | **> 60 dB** (ENOB > 9,67 bits) | requisito de la persona (2026-10-30) |
 
 ---
 
@@ -245,6 +249,9 @@ Fuente de los niveles del CP2102: datasheet del CP2102-GMR (Silicon Labs), secci
 6. ~~CRC-8 o XOR~~ (resuelto el 2026-10-21: CRC-8, ver §10). Falta la lista final de tipos de trama.
 7. Revisión de silicio (MPLAB X → Dashboard).
 8. Valor `VBOR` del brown-out (el MCC de clase usó `BORV = LO`, 2,45 V).
+9. Con qué ADC y `Vref` calculó el profesor los 352 µV (corresponden a 12 bits y 5 V; con 3,7 V son 261 µV).
+10. Cómo se mide el SINAD > 60 dB: sobre el ADC con una senoidal casi a escala completa (lo que se adoptó) o sobre la señal real de PCB2 (±185 mV, donde un 12 bits ideal da 54 dB), y a qué frecuencias.
+11. Unidad de `ADACQ` (10 µs o 320 µs; prueba 4.16) y duración de las ISR de la UART, que fija el jitter del disparo de Q.
 
 ---
 
@@ -261,3 +268,27 @@ Fuente de los niveles del CP2102: datasheet del CP2102-GMR (Silicon Labs), secci
 | 2026-10-21 | Verificación de tramas con **CRC-8** (polinomio `0x07`, inicial `0x00`, sin reflejo, sobre los bytes 2 a 7). Se descarta el XOR. Formato en `docs/especificacion_protocolo.md` | Decisión de la persona. Cierra el pendiente 6 de §9 en lo que toca al CRC |
 | 2026-10-21 | El PWM de auto-cero usa los **10 bits directos** (sin dithering ni divisor); el residuo de hasta ±20 cuentas se resta después por software. Detalle y motivos en `docs/especificacion_pwm.md` §2 y §9 (D-1) | Decisión de la persona; paso de 3,61 mV en I0 y 36 mV en la salida |
 | 2026-10-21 | El cálculo del filtro RC del PWM (valores de R y C) se **aplaza** | Decisión de la persona; T-06 no lo necesita para empezar |
+| 2026-10-30 | **SINAD del ADC > 60 dB** como requisito de diseño | Decisión de la persona. Condiciones de medición en `docs/especificacion_adc.md` §6 [PROPUESTA] |
+| 2026-10-30 | Se documenta el ADC de T-09: muestreo de 1 kHz por Timer0, promedio de 5 y tipos de trama `0x20`, `0xA0`, `0xA1` | El código ya existía (zip del 2026-10-30); se documentó lo que hace. No hubo cambio de diseño |
+
+
+---
+
+## 11. ADC: criterios y valores escogidos (Fase 2)
+
+> Cuentas, tiempos y pruebas: `docs/especificacion_adc.md`. Aquí solo el porqué de cada valor. **[VERIFICADO]** = datasheet, código o documento de `docs/`; **[CÁLCULO]** = cuenta propia comprobada; **[PROPUESTA]** = por aprobar.
+
+| Decisión | Valor | Por qué | Alternativas descartadas |
+|---|---|---|---|
+| Referencia | `VDD` = 3,7 V | Cubre 0 a 3,7 V (los rieles de PCB2) sin recorte. `Vref2` sale de un divisor del mismo riel, así que el nivel de reposo es ratiométrico (TI Ec. 26). No usa pines: RA1/`ADCVREF+` es ICSPCLK | FVR de 4,096 V (no puede superar `VDD`, DS p.491); FVR de 2,048 V (recorta toda señal sobre 2,048 V; el rango lineal de 1,85 ± 0,185 V llega a 2,035 V, a 13 mV del recorte); `VDD` de 5 V (la placa trabaja a 3,7 V) |
+| Muestreo | 1 kHz | Pedido por el profesor. La señal está limitada a ≈ 20 Hz: sobremuestreo de 25 [CÁLCULO]. Que el filtro de 20 Hz de PCB2 evite el aliasing se comprueba en la prueba 4.7 | – |
+| Disparo | Timer0 por hardware (`ADACT`) | El instante de muestreo de I no depende del software (el jitter que importa es el del reloj de muestreo, no el de conversión). Sin esperas | `__delay_ms` o iniciar por software: prohibido y con jitter |
+| I y Q | un ADC multiplexado, en ráfaga | Un solo convertidor. Sesgo entre canales de 0,5 % a 20 Hz si la adquisición es de 10 µs, 4,4 % si es de 320 µs [CÁLCULO] | Alternar canales a 2 kHz (sesgo de 500 µs, 6 %); ADC de muestreo simultáneo (innecesario) |
+| Jitter de Q | por vigilar | Q lo arranca la ISR, así que hereda la variación de latencia de las ISR de la UART (hasta 25 µs ⇒ 61 dB a 20 Hz) [CÁLCULO] | Disparar Q por hardware (a decidir si la prueba 4.17 falla) |
+| Promedio | 5 pares | Baja el ruido hasta 7 dB si el ruido es blanco y ≥ 0,5 LSB. Atenúa solo 0,14 dB a 20 Hz [CÁLCULO]. 200 tramas/s = 15,6 % de la línea | `N = 1`: 1000 tramas/s = 78 % de la línea (solo para el histograma) |
+| ISR del ADC | llamada directa desde `interrupt_manager.c` (C-11) | Mismo criterio que C-06: no se cambia la función en ejecución, y se ahorra el salto indirecto | Puntero `ADCC_ADI_InterruptHandler` de MCC |
+| SINAD | > 60 dB | Requisito de la persona. Un 12 bits ideal da 74 dB a escala completa: 14 dB de margen para ruido, jitter, referencia y distorsión | – |
+
+**Resolución:** 12 bits (DS `AD01`, p.632). El LSB es 0,903 mV y el ruido de cuantización ideal 261 µV con 3,7 V. **El SINAD depende de la amplitud:** con la señal real de PCB2 (±185 mV) un 12 bits ideal da 54 dB, por eso en §9 queda pendiente cómo se entiende el requisito.
+
+**Cómo se comprueba:** pruebas 4.3 (histograma), 4.15 (SINAD), 4.16 (adquisición real y ráfaga) y 4.17 (jitter de Q) de `docs/protocolos_prueba.md`.

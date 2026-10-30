@@ -12,7 +12,7 @@ Proyecto Micro 3 · Fecha: 2026-10-16 · Borrador v1
 | 1. UART (enlace físico, buffer circular, ISR) | 1 | por hacer |
 | 2. Protocolo de tramas (CRC, errores, resincronización) | 1 | por hacer |
 | 3. PWM + filtro RC (auto-cero) | 2 | por hacer |
-| 4. ADC (canales I y Q) | 2 | por hacer |
+| 4. ADC (canales I y Q) | 2 | código implementado (T-09), sin probar en el chip |
 | 5. Pulsador y lazo de auto-cero | 2 | por hacer |
 | 6. Integración con el PC (gráfica I vs Q) | 2 | por hacer |
 
@@ -127,16 +127,29 @@ Datos que faltan: valores reales de R y C del filtro en la placa (para calcular 
 
 ADC de 12 bits con referencia VDD = 3,7 V: 1 LSB = 3,7 V / 4096 = 0,903 mV. La señal en reposo debe quedar cerca de Vref2 (1,85 V), que corresponde al código 2048.
 
+Muestreo a 1 kHz disparado por Timer0, I y Q convertidos en menos de 1 ms, promedio de 5 (`ADC_N_PROMEDIO`). Especificación: `docs/especificacion_adc.md`. **Requisito de la persona (2026-10-30): SINAD del ADC > 60 dB** (prueba 4.15).
+
+Antes de las pruebas: `MODO_PRUEBA_ADC = 0` en `main.c` (con 1 solo se manda texto para el Serial Plotter, prueba 4.18) y, para el histograma, compilar con `ADC_N_PROMEDIO = 1`. Pines de prueba: RC2 sube durante `adc_iq_isr()`; hay **dos pulsos por periodo** (fin de la conversión de I y fin de la de Q).
+
 | ID | Qué se verifica | Procedimiento | Valor esperado | Criterio | Resultado |
 |---|---|---|---|---|---|
 | 4.1 | Código en reposo | Entrada I y Q conectadas a Vref2 (1,85 V medidos con el multímetro) | Código ≈ 2048 | 2048 ± 10 códigos **[PROPUESTA]** | |
-| 4.2 | Conversión contra voltaje | Aplicar 0,5 V, 1,0 V, 1,85 V, 2,5 V, 3,2 V desde una fuente, medir cada uno con el multímetro y comparar con el código | Código = V / 3,7 × 4096 | Error ≤ 5 LSB en cada punto **[PROPUESTA]** | |
-| 4.3 | Ruido | Entrada fija; tomar 1000 muestras y calcular la desviación estándar | Anotar | σ ≤ 2 LSB **[PROPUESTA]** | |
+| 4.2 | Conversión contra voltaje | Aplicar 0,5 V, 1,0 V, 1,85 V, 2,5 V, 3,2 V desde una fuente, medir cada uno con el multímetro y comparar con el código | Código = V / 3,7 × 4096 | Error ≤ 5 LSB en cada punto **[PROPUESTA]**. Nota: el datasheet da offset ±0,5 LSb típ. (±6 máx.) y ganancia ±0,2 típ. (±6 máx.) con `VDD` = 3 V y `TAD` = 1 µs (DS p.632); en el peor caso la suma supera los 5 LSB | |
+| 4.3 | Ruido (histograma) | Compilar con `ADC_N_PROMEDIO = 1`. Con la entrada en 0 V (pin a GND) y luego en Vref2, tomar ≥ 4096 muestras, contar los códigos y calcular σ (`docs/especificacion_adc.md` §8) | Anotar σ, códigos distintos y pico a pico | σ ≤ 2 LSB **[PROPUESTA]**. Ver CP-6: con σ = 2 LSB el SINAD a escala completa sería ≈ 57 dB | |
 | 4.4 | Canales independientes | Variar solo I y verificar que Q no cambie, y al revés | Sin cambio en el otro canal | Variación ≤ 3 LSB | |
-| 4.5 | Frecuencia de muestreo | Pulso en RC2 en cada muestra (disparo por Timer) | Período constante | Error de período ≤ 1 % | |
+| 4.5 | Frecuencia de muestreo | Pulso en RC2 en cada ISR (disparo por Timer0): dos pulsos por periodo; se mide el periodo entre pulsos de I | 1000 µs | Error de período ≤ 1 % | |
 | 4.6 | Señal de 20 Hz | Inyectar una senoidal de 5 Hz y otra de 20 Hz con un generador, y capturar la forma por UART | Amplitud y frecuencia correctas | Frecuencia ± 2 %, amplitud ± 5 % **[PROPUESTA]** | |
 | 4.7 | Aliasing | Inyectar una señal por encima de fs/2 | Se atenúa por el filtro de 20 Hz | La señal medida está por debajo de 3 LSB | |
 | 4.8 | Tiempo de adquisición | Cambiar la fuente de alta a baja impedancia y comparar | Mismo código | Diferencia ≤ 2 LSB. Si no, aumentar el tiempo de adquisición (errata ADCC 1.1.2) | |
+| 4.10 | Compatibilidad con el eco *(inferida del código)* | Con `MODO_ECO` = 1 y el ADC en marcha, repetir 1.5, 1.6 y 1.7 | El eco no se afecta | Las tres siguen pasando | |
+| 4.13 | Duración de `adc_iq_isr()` *(inferida del código)* | Ancho del pulso de RC2 con el osciloscopio | Anotar | ≤ 25 µs **[PROPUESTA]**, igual que 1.10 y 1.11 | |
+| 4.14 | Sin pérdidas *(inferida del código)* | 10 min con `ADC_STREAM` encendido; leer `adcParesPerdidos` y `adcTramasPerdidas` en el depurador y revisar el `SEQ` de `DATA_IQ` en el PC | Ambos contadores en 0 | `SEQ` sin saltos | |
+| **4.15** | **SINAD del ADC (requisito > 60 dB)** | Generador **directo** en RC0 (luego RC1), sin PCB2, con ≤ 10 kΩ. Senoidal de 1,7 V de amplitud centrada en 1,85 V a 5 Hz y a 20 Hz (para ciclos enteros con `fs` = 200 Hz y 4096 muestras: `k` = 82 da 4,004 Hz y `k` = 410 da 20,02 Hz; con otra frecuencia, la ventana de Kaiser de `sinad_db` reduce el error). Repetir con 0,5 V de amplitud. Capturar 4096 pares por `DATA_IQ` (y, aparte, con `ADC_N_PROMEDIO` = 1) y calcular con `sinad_db` (`docs/especificacion_adc.md` §6) | 73 dB si solo hay cuantización | **SINAD ≥ 60 dB** (ENOB ≥ 9,67 bits) a 5 Hz y 20 Hz en I y en Q | |
+| 4.16 | Tiempo real de adquisición y ráfaga de I y Q | Osciloscopio en RC2 y disparo con el Timer0: separación entre los dos pulsos y desde el disparo hasta el fin del segundo | ≈ 38,5 µs entre pulsos si `ADACQ` cuenta ciclos de Fosc; ≈ 349 µs si cuenta `TAD` (DS p.529) | I + Q terminan en < 1 ms (≤ 800 µs, 20 % de margen). Anotar cuál de los dos casos es (CP-7) | |
+| 4.17 | Jitter del instante de muestreo de Q | Con la UART transmitiendo y recibiendo, osciloscopio en persistencia sobre RC2: variación de la separación entre el pulso de I y el de Q | Anotar el ancho de la variación `T` | `T` ≤ 8,7 µs (−70 dB a 20 Hz y escala completa) **[PROPUESTA]**; hasta 27 µs consume los 60 dB enteros | |
+| 4.18 | Prueba temporal del Serial Plotter (`MODO_PRUEBA_ADC = 1`) | Generador en RC0/RC1 con una senoidal de menos de 10 Hz; ver `I:...,Q:...` en el Serial Plotter de Arduino IDE | I y Q siguen al generador; `adcPruebaLineasPerdidas` = 0 | Solo cualitativa (20 líneas/s); **no** sirve para SINAD ni histograma | |
+
+Las pruebas **4.9, 4.11 y 4.12** también las cita el código, pero su definición (en `docs/instrucciones_claude_code_adc.md`, que no está en la carpeta) no se encontró: sin definir. Las 4.10, 4.13 y 4.14 se reconstruyeron de los comentarios del código y deben revisarse.
 
 ---
 

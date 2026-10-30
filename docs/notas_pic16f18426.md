@@ -270,9 +270,27 @@ Si resultara ser A1/A2, la regla "escribe `TX1REG` solo cuando `TX1IF = 1`" ya c
 
 Ejemplo ⚠️: con Fosc = 16 MHz, `T2PR = 255`, prescaler 1:1 → período = 256 × 4 × 62,5 ns = **64 µs (15,6 kHz)** con **10 bits de resolución** (4 × 256 = 1024 pasos). El filtro RC de salida debe atenuar bien esa frecuencia.
 
-### 9.2 ADC
+### 9.2 ADC (ADCC, DS cap. 32) [VERIFICADO en el DS, con páginas; lo no probado en el chip se marca]
 
-12 bits (ADCC), 11 canales externos, FVR de 1,024 / 2,048 / 4,096 V. Registros que existen: `ADCON0–3`, `ADPCH`, `ADREF`, `ADCLK`, `ADACQ`, `ADPRE`, `ADCAP`, `ADRES`, `ADSTAT`, `ADACT`, `ADCNT`. **Pendiente** leer: tiempo de adquisición, alineación del resultado, disparo automático por Timer (`ADACT`) y referencia (`ADREF`). Con VDD = 3,7 V y I/Q centradas en ~1,85 V, cada cuenta vale ~0,9 mV (3,7 V / 4096) ⚠️.
+12 bits, 11 canales externos, FVR de 1,024 / 2,048 / 4,096 V. Lo que usa T-09:
+
+| Dato | Valor | Fuente |
+|---|---|---|
+| Resolución y errores | 12 bits. Integral ±1 (típ.) / ±2 LSb (máx.), diferencial ±1 LSb, offset ±0,5 / ±6 LSb, ganancia ±0,2 / ±6 LSb. Condiciones: `VDD` = 3 V, `TAD` = 1 µs, `VREF` = 3 V, 25 °C: **no son las nuestras**. Sin códigos perdidos | DS Tabla 39-13, p.632 |
+| Fuente recomendada | impedancia de 10 kΩ | `AD08`, p.632 |
+| Tiempos | `TAD` de 0,5 a 9 µs con Fosc como reloj (`AD20`); conversión = 14 `TAD` + 2 `TCY` (`AD22`); adquisición típica 2 µs (`AD23`) | Tabla 39-14, p.633 |
+| Reloj del ADC | `ADCON0.CS` = 0: Fosc dividido según `ADCLK`; = 1: oscilador FRC. Con Fosc = 16 MHz, `ADCLK = 0x0F` (Fosc/32) da `TAD` = 2 µs; Fosc/128 daría 8 µs | p.501 (Tabla 32-1), p.532, p.539 |
+| Conversión | 28,5 µs con `TAD` = 2 µs y `TCY` = 250 ns [CÁLCULO] | `AD22` |
+| `ADACQ` | «Number of ADC clock periods in the acquisition time». Con `ADPRE` = 0, la adquisición empieza al arrancar la conversión; `ADACQ = 0`: el tiempo de adquisición no se incluye en el ciclo de conversión. **Duda abierta:** el registro (p.529) lo define en periodos del reloj del ADC, o sea 160 × `TAD` (2 µs) = 320 µs, mientras que la Fig. 32-2 (p.501) rotula la adquisición como «1-8191 `TCY`» y el comentario de `adc_iq.c` (línea 101) supone 10 µs (160 × 62,5 ns). Se mide con RC2 (prueba 4.16) | p.529, p.509–510, Fig. 32-2 p.501 |
+| Disparo automático | `ADACT.ACT` = `00010`: desbordamiento de Timer0 (`0x02`). Con el flanco, el hardware pone `GO`. «Using the auto-conversion trigger does not assure proper ADC timing» | Tabla 32-6, p.538; aviso en §32.2.6, p.504 |
+| Canales (`ADPCH`) | `000000` = RA0/ANA0 (valor tras el reset, ¡es ICSPDAT!), `010000` = RC0/ANC0 (`0x10`), `010001` = RC1/ANC1 (`0x11`) | p.528 |
+| Referencia (`ADREF`) | `ADPREF` = 00 → `VDD`; = 11 → FVR. `ADNREF` = 0 → `VSS`. El FVR **no puede superar `VDD`** | p.537; FVR p.491 |
+| Resultado | `ADRESH:ADRESL`; el código de T-09 lo lee justificado a la derecha (`ADCON0 = 0x84` en `adcc.c`: `ON` = 1 y `FRM` = 1) | `ADRES` p.527; `ADCON0` p.532 |
+| Interrupción | `PIR1.ADIF` (bandera, la baja el software) y `PIE1.ADIE` (habilitación). Nombres comprobados en el código de T-09, **sin compilar con el `.h` real en esta sesión** | `PIR1` p.101; `PIE1` p.104 |
+| Errata 1.1.2 | tiempo de adquisición extra entre las dos conversiones del modo de doble muestra: **no aplica**: `ADCON1 = 0` (`ADDSEN` = 0, sin doble muestra) y `ADCON2 = 0` (modo básico) en `adcc.c` | errata 1.1.2 |
+| Timer0 en 8 bits | `TMR0L` se compara con `TMR0H`; al coincidir se reinicia: período = `TMR0H` + 1 cuentas del reloj ya dividido. Con Fosc/4 y 1:16: 4 µs por cuenta; `TMR0H = 249` → 1000 µs [CÁLCULO] | DS cap. 18, p.260–261 |
+
+Con VDD = 3,7 V y I/Q centradas en ~1,85 V, cada cuenta vale 0,903 mV (3,7 V / 4096) y el ruido de cuantización ideal es 261 µV. Especificación completa del uso: `docs/especificacion_adc.md`.
 
 ### 9.3 Timer2/4/6 (8 bits) como base de tiempo con interrupción [VERIFICADO en T-05]
 
@@ -327,7 +345,7 @@ Cuenta que se usó en T-05 (código ya retirado el 2026-10-21): Fosc 16 MHz → 
 ## 12. Pendientes de leer a fondo
 
 - Capítulo 7 (Interrupts): latencia exacta y registros `PIR*`/`PIE*` restantes.
-- ADCC (cap. 27): adquisición, justificación, disparo por Timer, tiempos de conversión.
+- ADCC (cap. 32 en este datasheet): leído lo que usa T-09 (§9.2). Faltan los modos de cálculo (promedio, filtro, umbrales) y el CVD, que no se usan.
 - Timer2 (cap. 20): leído para T-05, ver §9.3. Falta `CCPTMRS` y cómo comparten Timer2 los dos PWM.
 - IOC (cap. 15) para el pulsador de auto-cero.
 - Especificaciones de BOR (`VBOR`) para elegir `BORV` con VDD = 3,7 V.

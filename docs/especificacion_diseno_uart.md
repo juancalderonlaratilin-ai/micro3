@@ -1,6 +1,6 @@
 # Especificación de diseño: enlace UART PC ↔ PIC (Fase 1)
 
-Proyecto Micro 3 · Firmware `firmware/Micro_Firmware.X` · Fecha: 2026-10-16
+Proyecto Micro 3 · Firmware `firmware/Micro_Firmware.X` · Fecha: 2026-10-16 · Actualizado: 2026-10-30 (requisitos del ADC)
 
 > **Estado:** borrador v2, revisado contra el datasheet, la errata y la guía de XC8. Los valores marcados **[PROPUESTA]** son decisiones de diseño que hay que confirmar. Los marcados **[VERIFICADO]** salen directamente de los documentos de `docs/`. El detalle y las páginas de cada dato están en **`notas_pic16f18426.md`**.
 
@@ -10,7 +10,7 @@ Proyecto Micro 3 · Firmware `firmware/Micro_Firmware.X` · Fecha: 2026-10-16
 
 **Dentro de la Fase 1:** comunicación serie bidireccional PC → PIC y PIC → PC, no bloqueante, con interrupciones, en binario (sin ASCII).
 
-**Fuera de la Fase 1** (se diseña después, pero los pines ya quedan reservados): lectura de I y Q con el ADC, PWM de auto-cero (I0/Q0), máquina de estados de calibración y la interfaz gráfica, que va **en el PC** (LabVIEW o Python), no en el PIC.
+**Fuera de la Fase 1** (se diseña después, pero los pines ya quedan reservados): lectura de I y Q con el ADC (**ya especificada en `docs/especificacion_adc.md`; el código de T-09 llegó en un zip el 2026-10-30 y está copiado a `firmware/`, sin probar**), PWM de auto-cero (I0/Q0), máquina de estados de calibración y la interfaz gráfica, que va **en el PC** (LabVIEW o Python), no en el PIC.
 
 **Objetivo de la Fase 1:** demostrar que el PIC recibe y envía bytes y tramas sin pérdidas y sin bloquear el programa principal.
 
@@ -32,6 +32,9 @@ Proyecto Micro 3 · Firmware `firmware/Micro_Firmware.X` · Fecha: 2026-10-16
 | Alimentación (VCC / VDD) | **3,7 V** DC de la fuente Keysight E36233A (GND a +3,7 V). Se asume que el PIC comparte esta alimentación. Las referencias Vref/Vref2 ≈ 1,85 V son la tierra virtual de las señales analógicas | confirmado (preinforme §1.2) |
 | Nivel lógico del conversor USB-serie | 3,3 V (CP2102, FT232R o similar) | ver nota 2.3 |
 | Visualización (gráfica de impedancia I vs Q) | **En el PC**, por UART, con LabVIEW o Python. El PIC no maneja pantalla | decidido (2026-10-16) |
+| ADC (Fase 2) | 12 bits (ADCC), `VREF = VDD = 3,7 V`, canales I = RC0 y Q = RC1 en un ADC multiplexado, **`fs` = 1 kHz** disparado por Timer0, I y Q convertidos en **menos de 1 ms**, promedio de 5 (200 pares/s). Detalle: `docs/especificacion_adc.md` | profesor y código de T-09; sin probar |
+| **SINAD del ADC** | **> 60 dB** (ENOB > 9,67 bits), medido con una senoidal de 5 Hz y de 20 Hz casi a escala completa. Un 12 bits ideal da 74 dB, así que quedan 14 dB para ruido, jitter, referencia y distorsión (`docs/especificacion_adc.md` §6) | requisito de la persona (2026-10-30); condiciones de medición [PROPUESTA] |
+| Ruido de cuantización ideal del ADC | 261 µV rms con `VREF` = 3,7 V (el profesor cita 352 µV, que corresponde a 12 bits y 5 V) | por confirmar con el profesor |
 
 ### 2.1 Por qué 16 MHz
 
@@ -74,12 +77,12 @@ Evitar los pines de programación (RA0 = ICSPDAT, RA1 = ICSPCLK, RA3 = MCLR) par
 | 6 | **RC4** | **TX (EUSART1)** | **1** | salida vía PPS: `RC4PPS = 0x0F`. Bajar `ANSELC4` (reset = analógico) |
 | 5 | **RC5** | **RX (EUSART1)** | **1** | entrada: `RX1DTPPS = 0x15` (en el datasheet se llama `RX1PPS`) (ya es el valor por defecto). Bajar `ANSELC5`. Nivel TTL (`INLVLC5 = 0`) |
 | 2 | **RA5** | LED de estado (heartbeat / error) | **1** | salida digital (bajar `ANSELA5`). Opcional, muy útil para depurar |
-| 10 | RC0 | Entrada analógica canal I (ANC0) | 2 | reservado |
-| 9 | RC1 | Entrada analógica canal Q (ANC1) | 2 | reservado |
+| 10 | RC0 | Entrada analógica canal I (ANC0) | 2 | **en uso** (T-09, sin probar) |
+| 9 | RC1 | Entrada analógica canal Q (ANC1) | 2 | **en uso** (T-09, sin probar) |
 | 11 | RA2 | PWM de I0 (auto-cero) | 2 | reservado. PWM6 vía PPS (`RA2PPS = 0x0D`) |
 | 3 | RA4 | PWM de Q0 (auto-cero) | 2 | reservado. PWM7 vía PPS (`RA4PPS = 0x0E`) |
 | 7 | RC3 | Pulsador de auto-cero (IOC, pull-up débil) | 2 | reservado |
-| 8 | RC2 | libre (reserva: pin de prueba para medir la ISR con el osciloscopio) | – | |
+| 8 | RC2 | libre (reserva: pin de prueba para medir la ISR con el osciloscopio) | – | con `ADC_PIN_PRUEBA = 1` (`adc_iq.h`) sube mientras corre `adc_iq_isr()` |
 | 13 / 12 / 4 | RA0 / RA1 / RA3 | ICSPDAT / ICSPCLK / MCLR | – | programación, no usar. RA3 solo es entrada |
 | 1 / 14 | VDD / VSS | alimentación | – | con capacitor de desacople de 100 nF cerca |
 
@@ -118,9 +121,11 @@ Razones y consecuencias:
 | EUSART1 | enlace con el PC | async, 8N1, `BRGH = 1`, `BRG16 = 1`, `SP1BRGH = 0`, `SP1BRGL = 34`, `SYNC = 0`, `SPEN`, `TXEN`, `CREN` |
 | Interrupciones | RX y TX por evento | `RC1IE` (recepción) siempre activa. `TX1IE` **solo mientras hay datos por enviar**. `PEIE` y `GIE` activos. Vector único en `0x0004` |
 | GPIO | LED de estado en RA5 | salida digital |
+| ADCC | I y Q a 12 bits | `ADREF = 0x00` (VDD y VSS), `ADCLK = 0x0F` (Fosc/32, `TAD` = 2 µs), `ADACQ = 160`, `ADACT = 0x02` (desbordamiento de Timer0), resultado justificado a la derecha, `ADIE = 1`. Ver `docs/especificacion_adc.md` §2 y §3 |
+| Timer0 | disparo del ADC cada 1 ms | 8 bits, Fosc/4, prescaler 1:16, `TMR0H = 249` (250 cuentas × 4 µs = 1000 µs) |
 | Bits de configuración | ver §11 | `LVP` habilitado, WDT desactivado en desarrollo, BOR activo |
 
-Periféricos reservados para la Fase 2: ADCC (2 canales, referencia VDD = 3,7 V; las salidas I y Q quedan centradas en ~1,85 V), Timer 2 + **PWM6/PWM7** (auto-cero), Timer 1 o Timer 0 (disparo periódico del ADC) e IOC (pulsador).
+Periféricos de la Fase 2: el ADCC (2 canales, referencia VDD = 3,7 V; las salidas I y Q quedan centradas en ~1,85 V) y el Timer0 (disparo a 1 kHz) tienen código desde el 2026-10-30 (T-09, copiado a `firmware/`, sin probar). Siguen reservados: Timer 2 + **PWM6/PWM7** (auto-cero) e IOC (pulsador).
 
 ---
 
@@ -137,6 +142,7 @@ Arquitectura guiada por eventos: las interrupciones solo capturan el evento y mu
 | E5 | FIFO de TX llena | `uart_tx_*` no puede encolar | Devuelve `false` al llamador (no bloquea) |
 | E6 | Trama completa y válida recibida | el parser (programa principal) | Ejecuta el comando y encola la respuesta |
 | E7 | Trama inválida (CRC malo o tipo desconocido) | el parser | Descarta, responde con trama de error y marca el LED |
+| E8 | Terminó una conversión del ADC | `ADIF && ADIE` | `adc_iq_isr()` guarda I (o Q), arranca la conversión siguiente y acumula el par (T-09) |
 
 ---
 
@@ -152,14 +158,16 @@ Arquitectura guiada por eventos: las interrupciones solo capturan el evento y mu
 | T6 | `uart_rx_read(uint8_t *byte)` | llamada desde el programa principal | Saca un byte de la FIFO de RX. `false` si está vacía |
 | T7 | `parser_task()` | bucle principal | Lee bytes de la FIFO de RX, busca el encabezado, verifica CRC y ejecuta el comando (E6/E7) |
 | T8 | `status_task()` | bucle principal | Maneja el LED y reporta banderas de error |
+| T9 | `adc_iq_isr()` | interrupción (E8) | Guarda I, arranca Q, guarda Q y suma el par al grupo de 5 (T-09) |
+| T10 | `adc_iq_get(&i, &q)` | llamada desde el programa principal | Entrega el último promedio si hay uno nuevo; no espera (T-09) |
 
 **Bucle principal:** `while(1) { parser_task(); status_task(); }`, sin esperas bloqueantes (prohibido `while(!TXIF)` y `__delay_ms` en la lógica).
 
-**Una sola ISR:** el chip tiene un único vector de interrupción (`0x0004`) y no tiene prioridades. T2 y T3 son dos bloques dentro de la misma función `void __interrupt() isr(void)`, que comprueba **bandera y habilitación** de cada fuente y limpia (o consume) la bandera antes de salir. No se rehabilita `GIE` dentro de la ISR [VERIFICADO: UG §5.8].
+**Una sola ISR:** el chip tiene un único vector de interrupción (`0x0004`) y no tiene prioridades. T2 y T3 son dos bloques dentro de la misma función `void __interrupt() isr(void)`, que comprueba **bandera y habilitación** de cada fuente y limpia (o consume) la bandera antes de salir. No se rehabilita `GIE` dentro de la ISR [VERIFICADO: UG §5.8]. Con T-09 se suma un tercer bloque, el del ADC (`ADIF` y `ADIE`), que `interrupt_manager.c` atiende después de TX y RX.
 
-**Prioridad:** E1 y E2 son las únicas interrupciones. Si coinciden, la ISR atiende primero la recepción (perder un byte recibido es peor que retrasar uno enviado).
+**Prioridad:** E1, E2 y (desde T-09) E8 son las únicas interrupciones. Si coinciden, la ISR atiende primero la recepción (perder un byte recibido es peor que retrasar uno enviado).
 
-**Plazo de servicio de RX:** el receptor tiene una FIFO de solo 2 bytes y se produce overrun si llega completo un tercer byte sin haber leído `RC1REG`. Con 86,8 µs por byte, la ISR debe atenderse en menos de ~2 tiempos de byte (≈ 174 µs). En la Fase 2, ninguna otra ISR (ADC, timer) puede retener la CPU ese tiempo.
+**Plazo de servicio de RX:** el receptor tiene una FIFO de solo 2 bytes y se produce overrun si llega completo un tercer byte sin haber leído `RC1REG`. Con 86,8 µs por byte, la ISR debe atenderse en menos de ~2 tiempos de byte (≈ 174 µs). En la Fase 2, ninguna otra ISR (ADC, timer) puede retener la CPU ese tiempo. La duración de `adc_iq_isr()` se mide con RC2 (prueba 4.13), y el jitter del instante de muestreo de Q depende de lo que tarden las ISR de la UART (`docs/especificacion_adc.md` §4).
 
 **Reglas de código de las ISR** [VERIFICADO: UG §5.8.5–5.8.7]:
 - Variables compartidas con la ISR: `volatile`. Los accesos a más de 1 byte no son atómicos: proteger con `di()` / `ei()` en el programa principal.
@@ -211,9 +219,10 @@ Una **trama** es un grupo de bytes con estructura fija. Todas miden 9 bytes y so
 | `0x7F` | PIC → PC | ERROR | `payload[0]` = código de error |
 
 - **Códigos de error:** `1` CRC inválido, `2` tipo desconocido, `3` overflow de la FIFO de RX, `4` error de hardware (framing/overrun).
+- **Tipos de la Fase 2 (ADC, T-09; en `protocol.h` y `protocol.c` desde el 2026-10-30, sin probar):** `0x20` ADC_STREAM (PC → PIC; `P0` = 0 detener, ≠ 0 iniciar), `0xA0` ADC_ACK (PIC → PC; copia el `SEQ` y `P0` = estado) y `0xA1` DATA_IQ (PIC → PC; I en `P0:P1`, Q en `P2:P3`, big-endian, `SEQ` propio). Detalle y ocupación de la línea: `docs/especificacion_adc.md` §11.
 - **Rendimiento:** 9 bytes = 90 bits → 781 µs por trama a 115200 baud (máx. ~1280 tramas/s).
 
-[PENDIENTE DE CONFIRMAR] CRC-8 o suma XOR, y si se agregan más tipos de trama.
+[PENDIENTE] La lista final de tipos de trama (CRC-8 ya decidido el 2026-10-21; faltan los de PWM, CP-1).
 
 ---
 
@@ -228,6 +237,9 @@ Una **trama** es un grupo de bytes con estructura fija. Todas miden 9 bytes y so
 | P5 | PING con CRC alterado | el PIC responde ERROR (código 1) y sigue funcionando |
 | P6 | Bytes basura antes de una trama válida | el parser resincroniza y responde al PING |
 | P7 | Desconectar y reconectar el cable | el enlace se recupera sin reiniciar el PIC |
+| P8 | **SINAD del ADC** con una senoidal de 5 Hz y otra de 20 Hz (1,7 V de amplitud, centrada en 1,85 V) en RC0 y RC1 | **SINAD > 60 dB** (prueba 4.15 de `docs/protocolos_prueba.md`) |
+| P9 | Muestreo de I y Q | `fs` = 1 kHz ± 1 % y las dos conversiones en menos de 1 ms (pruebas 4.5 y 4.16) |
+| P10 | Histograma con la entrada fija | σ y códigos distintos anotados (prueba 4.3) |
 
 ---
 
@@ -242,7 +254,7 @@ Una **trama** es un grupo de bytes con estructura fija. Todas miden 9 bytes y so
 7. Valores exactos de los bits de configuración: generarlos con MPLAB X (*Window > Target Memory Views > Configuration Bits*) o consultar `pic_chipinfo.html` de la carpeta `docs` de XC8.
 8. Qué terminal se usará para las pruebas (Realterm, Hercules, Tera Term) y si el PC ya tiene el driver del conversor.
 9. Valor `VBOR` (brown-out) con VDD = 3,7 V, que falta leer en las especificaciones eléctricas.
-10. Referencia del ADC = VDD (Fase 2). Comprobar en el capítulo del ADCC (`ADREF`) y revisar el ruido de la alimentación, porque la lectura depende de ella.
+10. Referencia del ADC = VDD: está en el código desde el 2026-10-30 (`ADREF = 0x00`). Falta confirmarla con el profesor y medir el ruido de la alimentación, porque la lectura depende de ella (`docs/especificacion_adc.md` §7). Los demás pendientes del ADC están en §13 de ese archivo.
 
 ---
 
@@ -275,3 +287,4 @@ XC8 exige programar **todos** los bits de configuración, y los valores numéric
 | `TB3261-Technical-Brief-DS90003261A.pdf` | Cómo escribir C para PIC16/PIC18 |
 | `00688b.pdf` | AN688: layout para ADC de 12 bits (relevante para PCB, no para el firmware) |
 | `Preinforme Practica 2 Final-...pdf` | Alimentación, filtros de 20 Hz, referencias de 1,85 V |
+| `especificacion_adc.md` | **ADC:** requisitos del profesor, SINAD > 60 dB, tiempos, jitter, referencia, histograma y tramas de datos |

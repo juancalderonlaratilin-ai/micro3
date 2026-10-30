@@ -17,6 +17,8 @@ Proyecto Micro 3 · Inicio: 2026-10-19 · Código revisado: `firmware/Micro_Firm
 | Reloj (en el `.mc3` se llama `INTERNAL OSCILLATOR`) | Frecuencia del reloj | `mcc.c`: `OSCILLATOR_Initialize()` | 5 |
 | EUSART1 | UART: baud, buffers, interrupciones | `eusart1.c` y `eusart1.h` | 6, 8, 9, 10 |
 | Interrupt Module | Rutina de interrupción única | `interrupt_manager.c` y `.h` | 7 |
+| ADCC | Canales, reloj del ADC, adquisición, disparo por Timer0, interrupción | `adcc.c` y `adcc.h` (T-09) | 11 |
+| TMR0 | Timer de 1 ms que dispara el ADC | `tmr0.c` y `tmr0.h` (T-09) | 12 |
 | RESET, WWDT | Reset y watchdog | no vi archivos propios en el proyecto | — |
 
 Los nombres de módulo salen del `.mc3`; en qué pestaña de la ventana está cada casilla no lo he visto.
@@ -35,6 +37,8 @@ Los nombres de módulo salen del `.mc3`; en qué pestaña de la ventana está ca
 | 8 | `eusart1.c`: `EUSART1_is_*`, `get_last_status`, `Read`, `Write` | explicada, falta confirmación |
 | 9 | `eusart1.c`: `EUSART1_Transmit_ISR()` | pendiente |
 | 10 | `eusart1.c`: `EUSART1_Receive_ISR()` y manejadores de error | pendiente |
+| 11 | `adcc.c`: `ADCC_Initialize()` (agregado el 2026-10-30; ver `docs/especificacion_adc.md` §2) | pendiente |
+| 12 | `tmr0.c`: `TMR0_Initialize()` (agregado el 2026-10-30) | pendiente |
 
 ## Cambios para Claude Code
 
@@ -54,6 +58,8 @@ Estado: `propuesta` → `aprobada` (solo la persona) → `implementada, sin prob
 | C-09 | Contadores `RxCount` y `TxBufferRemaining` (Read, Write y las dos ISR) | Quitarlos: buffer lleno cuando `head + 1 == tail`, vacío cuando `head == tail`; cada índice lo mueve un solo lado | Con contador, main y la ISR modifican la misma variable y por eso MCC apaga `RC1IE`/`TX1IE` un instante. Sin contador no hace falta (`docs/criterios_diseno.md` §6) | T-03 | implementada, sin probar (2026-10-19) |
 | C-10 | `EUSART1_is_tx_done()` | Devolver `true` solo si el buffer de TX está vacío **y** `TRMT` = 1 | `TRMT` solo mira el registro de desplazamiento; con bytes aún en el buffer podría decir "terminó" | T-03 | implementada, sin probar (2026-10-19) |
 | C-04 | `device_config.c`, `WDTE = OFF` | Dejar el watchdog apagado. No hay cambio de código: ya está en OFF | Un watchdog reinicia el chip si el programa se cuelga; la persona decide apagarlo | — | aprobada (2026-10-19), sin cambio de código |
+| C-11 | `interrupt_manager.c`, ISR del ADC | Atender `ADIE` y `ADIF` con una llamada directa a `adc_iq_isr()`, sin pasar por el puntero `ADCC_ADI_InterruptHandler` de MCC | Mismo criterio que C-06. La función baja `ADIF`; si no, la interrupción se repite sin fin | T-09 | implementada, sin probar. **Reconstruida de los comentarios del código (2026-10-30)**: su ficha original no está en la carpeta |
+| C-12 | `adcc.c`, `ADPCH = 0x00` | Poner `ADPCH = CANAL_I` en `adc_iq_init()` | Tras `ADCC_Initialize()` el canal es RA0, que es ICSPDAT del SNAP; el primer disparo debe convertir I (RC0) | T-09 | implementada, sin probar. **Reconstruida de los comentarios del código (2026-10-30)** |
 
 Para implementar C-01 y C-02 (T-02): solo cambiar esas dos líneas de `device_config.c` a mano (`PPS1WAY = OFF`, `FCMEN = OFF`) y actualizar el comentario de cada una. Después **no** pulsar *Generate* en MCC; si hubiera que hacerlo, antes se ponen las mismas dos opciones en el `.mc3` (ventana System Module). El `.mc3` todavía dice ON/ON.
 

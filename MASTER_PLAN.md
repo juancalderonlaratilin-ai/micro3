@@ -13,6 +13,8 @@ Criterios de diseño y valores escogidos (reloj, baud, formato, niveles, buffers
 
 Pruebas de cada módulo (UART primero, luego protocolo, PWM, ADC, auto-cero e integración): `docs/protocolos_prueba.md`. Cada módulo debe cumplir sus criterios antes de pasar al siguiente.
 
+ADC (Fase 2): requisitos del profesor, SINAD > 60 dB, tiempos, jitter, referencia, histograma, tramas de datos y pruebas: `docs/especificacion_adc.md`. *(Agregado por el chat de Claude el 2026-10-30; Gemini lo revisa.)*
+
 MCC: la persona indica que SÍ puede usarse (2026-10-19). El código generado en clase es la base de trabajo y se revisa parte por parte: `docs/revision_codigo_mcc.md`. Configuración: `docs/guia_mcc_referencia.md`. Ejemplo de nombres: el registro de entrada PPS de RX1 se llama `RX1DTPPS` en el `.h`, aunque el datasheet lo llame `RX1PPS`.
 
 ## Herramientas (versiones que usa el equipo)
@@ -46,6 +48,8 @@ Ese archivo es el enunciado de la práctica (qué pide el curso). Donde contradi
 - Alimentación VCC = 3,7 V (fuente Keysight E36233A, según el preinforme). Conversor USB-serie a 3,3 V, nunca a 5 V.
 - Chip fijo: PIC16F18426 (14 pines, 8 usados, 1 de reserva: RC2). La gráfica de impedancia I vs Q se dibuja **en el PC** (LabVIEW o Python); el PIC no maneja pantalla. Presupuesto de pines en `docs/especificacion_diseno_uart.md` §3.1.
 - Oscilador HFINTOSC a 16 MHz, UART 8N1 a 115200 baud (SP1BRG = 34).
+- **SINAD del ADC > 60 dB** (ENOB > 9,67 bits). Requisito de la persona, 2026-10-30. Un 12 bits ideal da 74 dB a escala completa, así que quedan 14 dB para ruido, jitter, referencia y distorsión. Cómo se mide: `docs/especificacion_adc.md` §6, prueba 4.15 de `docs/protocolos_prueba.md`. Por confirmar con el profesor.
+- ADC de 12 bits con `VREF = VDD` = 3,7 V, muestreo de **1 kHz** disparado por Timer0 (hardware) y conversión de I (RC0) y Q (RC1) en **menos de 1 ms**, sin esperas bloqueantes. Detalle y motivos: `docs/especificacion_adc.md` y `docs/criterios_diseno.md` §11.
 - Firmas pedidas en clase: `tx_DAT(const char *DATA, uint16_t size)` y `tx_string(const char *data)`.
 - **Nunca escribir nombres de registros o bits de memoria.** Comprobarlos en `pic16f18426.h` (carpeta `pic\include\proc\` de la instalación de XC8) o en el datasheet. Cuando algo se verifique, anotarlo en `docs/notas_pic16f18426.md`.
 - Una sola ISR (`void __interrupt() isr(void)`, vector único). Comprobar bandera **y** habilitación de cada fuente. `TX1IF` vale 1 siempre que `TX1REG` esté vacío, aunque `TX1IE` sea 0.
@@ -63,6 +67,7 @@ Ese archivo es el enunciado de la práctica (qué pide el curso). Donde contradi
 
 - Fase 1 (actual): enlace UART PC ↔ PIC. Sin ADC ni PWM todavía.
 - Fase 2: ADC de I/Q, PWM de auto-cero, máquina de estados.
+- *(Nota del chat de Claude, 2026-10-30, para revisión de Gemini)* El código del ADC (T-09) llegó en un zip antes de cerrar las pruebas de la Fase 1. Se fusionó en `firmware/Micro_Firmware.X` el 2026-10-30; está sin compilar en MPLAB X y sin probar. Ver T-09 y `docs/especificacion_adc.md`.
 
 Cuando cambie una decisión de diseño (pines, baud, formato de trama), actualizar `docs/especificacion_diseno_uart.md`.
 
@@ -118,10 +123,18 @@ Propuesta inicial, tomada de "Siguiente paso" de `docs/estado.md`. Gemini la ref
 | T-06 | PWM de auto-cero, **sin serial**: `pwm.c/.h` con `pwm_init`, `pwm_set` y `pwm_get`. PWM6 en RA2 (I0) y PWM7 en RA4 (Q0), Timer2 con `T2PR` = 255 a Fosc/4 (15,625 kHz, 10 bits), duty inicial 512 en los dos. El duty se fija en el código de `main` para la prueba. Detalle: `docs/especificacion_pwm.md` §3 a §7. Los nombres de registros se comprueban en `pic16f18426.h` antes de usarlos. El cálculo del filtro RC queda para después (la persona, 2026-10-21) | Pruebas 3.1 y 3.2 (osciloscopio en el pin); 3.3, 3.4 y 3.7 cuando haya filtro; la UART y el protocolo siguen funcionando | propuesta (se hace después de T-04: de una en una) |
 | T-07 | Control del PWM por serial sobre T-04 y T-06: tramas `SET_PWM` (`0x10`), `GET_PWM` (`0x11`) y `PWM_ACK` (`0x90`), errores 5 (canal) y 6 (rango). Detalle: `docs/especificacion_pwm.md` §8 | Pruebas 3.10 a 3.14 de `docs/especificacion_pwm.md` §10 | propuesta (requiere T-04 y T-06 probadas) |
 | T-08 | Ajuste manual del offset de I y Q desde el PC, con PCB2 conectada y el filtro RC montado. Sin código nuevo: es una tarea de pruebas y de hardware. Valores de R y C y nodo de conexión: por definir | Pruebas 3.5, 3.6, 3.8, 3.9, 3.15 y 3.16; anotar el residuo en cuentas del ADC | propuesta (requiere T-07 y el filtro) |
+| T-09 | ADC de I y Q a 1 kHz y trama `DATA_IQ`: `adc_iq.c/.h` (Timer0 dispara el ADC cada 1 ms; I en RC0, Q en RC1; promedio de `ADC_N_PROMEDIO` = 5), tipos `0x20` ADC_STREAM, `0xA0` ADC_ACK y `0xA1` DATA_IQ en `protocol.c`, y `adc_prueba.c/.h` con `MODO_PRUEBA_ADC` para el Serial Plotter. Detalle: `docs/especificacion_adc.md`. *Fila agregada por el chat de Claude el 2026-10-30 a partir del código recibido; Gemini la revisa* | Pruebas 4.1 a 4.8 y 4.10 a 4.17 de `docs/protocolos_prueba.md` (4.9, 4.11 y 4.12 sin definir). **SINAD del ADC > 60 dB (4.15)**; I y Q convertidos en menos de 1 ms (4.16) | implementada, sin probar (código recibido el 2026-10-30 y copiado a `firmware/Micro_Firmware.X`; aprobación e instrucciones no encontradas) |
 
 ## Preguntas para el planificador
 
 (Las deja Claude Code cuando una tarea choca con la especificación. Gemini responde aquí.)
+
+Dejadas el 2026-10-30 (chat de Claude, al documentar T-09):
+
+1. El código de T-09 cita `docs/instrucciones_claude_code_adc.md`, la decisión D-3 y las pruebas 4.9, 4.11 y 4.12. Ese archivo no está en la carpeta: ¿dónde está, o hay que redefinirlas? En `docs/especificacion_adc.md` §12 se reconstruyeron D-1, D-2, D-4, C-11 y C-12 a partir de los comentarios del código.
+2. `ADACQ = 160`: un comentario de `adc_iq.c` (línea 101) supone 10 µs, y el datasheet (p.529) lo define en periodos del reloj del ADC, que serían 320 µs. ¿Cuál es el valor buscado? Se mide con la prueba 4.16 (ver CP-7).
+3. SINAD > 60 dB: ¿se mide en el ADC con una senoidal casi a escala completa (lo que se adoptó) o con la señal real de PCB2 (±185 mV, donde un 12 bits ideal da 54 dB)? ¿A qué frecuencias (5 Hz y 20 Hz)?
+4. El profesor dio 352 µV de ruido de cuantización ideal. Eso corresponde a 12 bits y 5 V; con `VREF` = 3,7 V son 261 µV. ¿Con qué `Vref` lo calculó?
 
 ## Cambios propuestos
 
@@ -136,5 +149,9 @@ Propuestos el 2026-10-21 (chat de Claude, a petición de la persona). Cada uno q
 | CP-3 | Prueba 5.3: el criterio pasa de «≤ 3 cuentas» a «≤ 20 cuentas» con el PWM de 10 bits (paso de 36 mV en la salida = 40 cuentas, error mínimo de medio paso). La resta del residuo se hace después, en el PC o en el PIC | `docs/protocolos_prueba.md` Módulo 5 | propuesta |
 | CP-4 | Agregar a `docs/protocolos_prueba.md` las pruebas 2.9 a 2.13 (`docs/especificacion_protocolo.md` §8) y 3.10 a 3.16 (`docs/especificacion_pwm.md` §10) | `docs/protocolos_prueba.md` | propuesta |
 | CP-5 | Decisiones PR-1 a PR-5 de `docs/especificacion_protocolo.md` §9 (CRC bit a bit, `MODO_ECO`, `SEQ` de los ERROR, sin timeout entre bytes, un ERROR por CRC malo) | T-04 | se usan las recomendaciones mientras la persona no diga otra cosa |
+| CP-6 | Prueba 4.3: el criterio de ruido pasa de «σ ≤ 2 LSB» a «σ ≤ 1,4 LSB». Con σ = 2 LSB el SINAD a escala completa sería ≈ 57 dB, por debajo del requisito de 60 dB (presupuesto de ruido y distorsión: 1,31 mV = 1,45 LSB). *Propuesto el 2026-10-30* | `docs/protocolos_prueba.md` Módulo 4 | propuesta |
+| CP-7 | `ADACQ` en `adcc.c`: si la prueba 4.16 muestra que cuenta periodos del reloj del ADC (320 µs), bajarlo a 5 (≈ 10 µs con `TAD` = 2 µs). El sesgo entre I y Q a 20 Hz pasaría de 4,4 % a 0,5 % y I + Q terminarían en ≈ 77 µs en vez de ≈ 697 µs. Comprobar antes que 10 µs bastan con la impedancia de fuente real de PCB2 (el datasheet recomienda ≤ 10 kΩ). *Propuesto el 2026-10-30* | T-09 | propuesta (depende del resultado de 4.16) |
 
 Ya decididos por la persona el 2026-10-21 (anotados en `docs/criterios_diseno.md` §10): CRC-8 en lugar de XOR; PWM de auto-cero con 10 bits directos; cálculo del filtro RC aplazado.
+
+Decidido por la persona el 2026-10-30 (anotado en `docs/criterios_diseno.md` §10): **SINAD del ADC > 60 dB**.

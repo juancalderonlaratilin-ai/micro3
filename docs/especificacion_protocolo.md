@@ -1,6 +1,6 @@
 # Especificación del protocolo de tramas con CRC-8 (tarea T-04)
 
-Proyecto Micro 3 · Fase 1b · Fecha: 2026-10-21 · Estado: **PROPUESTA, sin aprobar** (no hay código)
+Proyecto Micro 3 · Fase 1b · Fecha: 2026-10-21 · Estado: T-04 **implementada, sin probar** (2026-10-21). El 2026-10-30 se agregaron los tipos del ADC (§2)
 
 > **Para qué sirve:** fijar dónde vive el código, el formato exacto, el CRC, los eventos, las tareas y las pruebas del protocolo **antes de escribir código**. Es la base sobre la que irán después `SET_PWM`/`GET_PWM` (`docs/especificacion_pwm.md`) y las tramas de datos I/Q.
 >
@@ -59,6 +59,16 @@ A 115200 baud una trama dura 781 µs. Como el largo es fijo, el payload puede co
 Convención [PROPUESTA]: las peticiones del PC usan `TYPE < 0x80` y las respuestas del PIC usan `petición | 0x80`; ERROR es la excepción (`0x7F`). Las respuestas copian el `SEQ` de la petición.
 
 **Códigos de ERROR:** `1` CRC inválido · `2` tipo desconocido · `3` overflow del buffer de RX · `4` error de hardware (framing/overrun). (`5` y `6` los agrega la especificación del PWM.)
+
+**Tipos del ADC (T-09; están en `protocol.h` y `protocol.c` desde el 2026-10-30, copiados del zip `Micro_Firmware.zip`; sin probar):**
+
+| TYPE | Sentido | Nombre | Payload | Respuesta |
+|---|---|---|---|---|
+| `0x20` | PC → PIC | ADC_STREAM | `P0` = 0 detener el envío, ≠ 0 iniciarlo | ADC_ACK |
+| `0xA0` | PIC → PC | ADC_ACK | `P0` = estado resultante (0 o 1), `P1–P3` = 0; copia el `SEQ` de la petición | – |
+| `0xA1` | PIC → PC | DATA_IQ | I en `P0:P1` y Q en `P2:P3`, big-endian (12 bits en 16); `SEQ` propio de 0 a 255 que sube **aunque la trama no quepa**, para que el PC vea el salto | – (sin pedirla) |
+
+Al arrancar el envío está apagado. Con 5 promedios salen 200 tramas/s (15,6 % de la línea). Detalle: `docs/especificacion_adc.md` §11.
 
 ## 3. El CRC-8
 
