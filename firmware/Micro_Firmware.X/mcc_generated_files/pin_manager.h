@@ -65,6 +65,46 @@
 #define PULL_UP_ENABLED      1
 #define PULL_UP_DISABLED     0
 
+// get/set CANAL_I aliases
+#define CANAL_I_TRIS                 TRISCbits.TRISC0
+#define CANAL_I_LAT                  LATCbits.LATC0
+#define CANAL_I_PORT                 PORTCbits.RC0
+#define CANAL_I_WPU                  WPUCbits.WPUC0
+#define CANAL_I_OD                   ODCONCbits.ODCC0
+#define CANAL_I_ANS                  ANSELCbits.ANSC0
+#define CANAL_I_SetHigh()            do { LATCbits.LATC0 = 1; } while(0)
+#define CANAL_I_SetLow()             do { LATCbits.LATC0 = 0; } while(0)
+#define CANAL_I_Toggle()             do { LATCbits.LATC0 = ~LATCbits.LATC0; } while(0)
+#define CANAL_I_GetValue()           PORTCbits.RC0
+#define CANAL_I_SetDigitalInput()    do { TRISCbits.TRISC0 = 1; } while(0)
+#define CANAL_I_SetDigitalOutput()   do { TRISCbits.TRISC0 = 0; } while(0)
+#define CANAL_I_SetPullup()          do { WPUCbits.WPUC0 = 1; } while(0)
+#define CANAL_I_ResetPullup()        do { WPUCbits.WPUC0 = 0; } while(0)
+#define CANAL_I_SetPushPull()        do { ODCONCbits.ODCC0 = 0; } while(0)
+#define CANAL_I_SetOpenDrain()       do { ODCONCbits.ODCC0 = 1; } while(0)
+#define CANAL_I_SetAnalogMode()      do { ANSELCbits.ANSC0 = 1; } while(0)
+#define CANAL_I_SetDigitalMode()     do { ANSELCbits.ANSC0 = 0; } while(0)
+
+// get/set CANAL_Q aliases
+#define CANAL_Q_TRIS                 TRISCbits.TRISC1
+#define CANAL_Q_LAT                  LATCbits.LATC1
+#define CANAL_Q_PORT                 PORTCbits.RC1
+#define CANAL_Q_WPU                  WPUCbits.WPUC1
+#define CANAL_Q_OD                   ODCONCbits.ODCC1
+#define CANAL_Q_ANS                  ANSELCbits.ANSC1
+#define CANAL_Q_SetHigh()            do { LATCbits.LATC1 = 1; } while(0)
+#define CANAL_Q_SetLow()             do { LATCbits.LATC1 = 0; } while(0)
+#define CANAL_Q_Toggle()             do { LATCbits.LATC1 = ~LATCbits.LATC1; } while(0)
+#define CANAL_Q_GetValue()           PORTCbits.RC1
+#define CANAL_Q_SetDigitalInput()    do { TRISCbits.TRISC1 = 1; } while(0)
+#define CANAL_Q_SetDigitalOutput()   do { TRISCbits.TRISC1 = 0; } while(0)
+#define CANAL_Q_SetPullup()          do { WPUCbits.WPUC1 = 1; } while(0)
+#define CANAL_Q_ResetPullup()        do { WPUCbits.WPUC1 = 0; } while(0)
+#define CANAL_Q_SetPushPull()        do { ODCONCbits.ODCC1 = 0; } while(0)
+#define CANAL_Q_SetOpenDrain()       do { ODCONCbits.ODCC1 = 1; } while(0)
+#define CANAL_Q_SetAnalogMode()      do { ANSELCbits.ANSC1 = 1; } while(0)
+#define CANAL_Q_SetDigitalMode()     do { ANSELCbits.ANSC1 = 0; } while(0)
+
 // get/set RC4 procedures
 #define RC4_SetHigh()            do { LATCbits.LATC4 = 1; } while(0)
 #define RC4_SetLow()             do { LATCbits.LATC4 = 0; } while(0)

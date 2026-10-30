@@ -15,6 +15,8 @@ Pruebas de cada módulo (UART primero, luego protocolo, PWM, ADC, auto-cero e in
 
 ADC (Fase 2): requisitos del profesor, SINAD > 60 dB, tiempos, jitter, referencia, histograma, tramas de datos y pruebas: `docs/especificacion_adc.md`. *(Agregado por el chat de Claude el 2026-10-30; Gemini lo revisa.)*
 
+Preinforme: **leer `docs/especificaciones_preinforme.md` antes de escribir cualquier preinforme** (requisitos de la clase, valores del UART y el ADC, bloques, diagramas de tiempo, trama, cumplimiento, pendientes y estructura). *(Agregado por el chat de Claude el 2026-10-30; Gemini lo revisa.)*
+
 MCC: la persona indica que SÍ puede usarse (2026-10-19). El código generado en clase es la base de trabajo y se revisa parte por parte: `docs/revision_codigo_mcc.md`. Configuración: `docs/guia_mcc_referencia.md`. Ejemplo de nombres: el registro de entrada PPS de RX1 se llama `RX1DTPPS` en el `.h`, aunque el datasheet lo llame `RX1PPS`.
 
 ## Herramientas (versiones que usa el equipo)
@@ -132,9 +134,10 @@ Propuesta inicial, tomada de "Siguiente paso" de `docs/estado.md`. Gemini la ref
 Dejadas el 2026-10-30 (chat de Claude, al documentar T-09):
 
 1. El código de T-09 cita `docs/instrucciones_claude_code_adc.md`, la decisión D-3 y las pruebas 4.9, 4.11 y 4.12. Ese archivo no está en la carpeta: ¿dónde está, o hay que redefinirlas? En `docs/especificacion_adc.md` §12 se reconstruyeron D-1, D-2, D-4, C-11 y C-12 a partir de los comentarios del código.
-2. `ADACQ = 160`: un comentario de `adc_iq.c` (línea 101) supone 10 µs, y el datasheet (p.529) lo define en periodos del reloj del ADC, que serían 320 µs. ¿Cuál es el valor buscado? Se mide con la prueba 4.16 (ver CP-7).
+2. `ADACQ = 160`: MCC lo guarda como 10 µs (`AquisitionTime` en el `.mc3`, que divide entre 16 MHz); el datasheet (p.529) lo define en periodos del reloj del ADC, que serían 320 µs, y su Fig. 32-2 (p.501) lo rotula en `TCY`, que serían 40 µs. ¿Cuál es el valor buscado? Se mide con la prueba 4.16 (ver CP-7).
 3. SINAD > 60 dB: ¿se mide en el ADC con una senoidal casi a escala completa (lo que se adoptó) o con la señal real de PCB2 (±185 mV, donde un 12 bits ideal da 54 dB)? ¿A qué frecuencias (5 Hz y 20 Hz)?
 4. El profesor dio 352 µV de ruido de cuantización ideal. Eso corresponde a 12 bits y 5 V; con `VREF` = 3,7 V son 261 µV. ¿Con qué `Vref` lo calculó?
+5. ¿Se confirma `Vref = VDD` (la genera la PIC) o se prefiere el FVR o una referencia externa? Ver `docs/especificacion_adc.md` §7.1. Falta además la impedancia de salida (`Zout`) del opa de las salidas I y Q de PCB2 (el datasheet del MCP604 ya está en `docs/MCP601-2.PDF` y no la da; §3.2).
 
 ## Cambios propuestos
 
@@ -150,7 +153,7 @@ Propuestos el 2026-10-21 (chat de Claude, a petición de la persona). Cada uno q
 | CP-4 | Agregar a `docs/protocolos_prueba.md` las pruebas 2.9 a 2.13 (`docs/especificacion_protocolo.md` §8) y 3.10 a 3.16 (`docs/especificacion_pwm.md` §10) | `docs/protocolos_prueba.md` | propuesta |
 | CP-5 | Decisiones PR-1 a PR-5 de `docs/especificacion_protocolo.md` §9 (CRC bit a bit, `MODO_ECO`, `SEQ` de los ERROR, sin timeout entre bytes, un ERROR por CRC malo) | T-04 | se usan las recomendaciones mientras la persona no diga otra cosa |
 | CP-6 | Prueba 4.3: el criterio de ruido pasa de «σ ≤ 2 LSB» a «σ ≤ 1,4 LSB». Con σ = 2 LSB el SINAD a escala completa sería ≈ 57 dB, por debajo del requisito de 60 dB (presupuesto de ruido y distorsión: 1,31 mV = 1,45 LSB). *Propuesto el 2026-10-30* | `docs/protocolos_prueba.md` Módulo 4 | propuesta |
-| CP-7 | `ADACQ` en `adcc.c`: si la prueba 4.16 muestra que cuenta periodos del reloj del ADC (320 µs), bajarlo a 5 (≈ 10 µs con `TAD` = 2 µs). El sesgo entre I y Q a 20 Hz pasaría de 4,4 % a 0,5 % y I + Q terminarían en ≈ 77 µs en vez de ≈ 697 µs. Comprobar antes que 10 µs bastan con la impedancia de fuente real de PCB2 (el datasheet recomienda ≤ 10 kΩ). *Propuesto el 2026-10-30* | T-09 | propuesta (depende del resultado de 4.16) |
+| CP-7 | `ADACQ` en `adcc.c`: si la prueba 4.16 muestra que cuenta periodos del reloj del ADC (320 µs), bajarlo a 5 (≈ 10 µs con `TAD` = 2 µs). El sesgo entre I y Q a 20 Hz pasaría de 4,4 % a 0,5 % y I + Q terminarían en ≈ 77 µs en vez de ≈ 697 µs. Comprobar antes que 10 µs bastan con la impedancia de fuente real de PCB2 (el datasheet recomienda ≤ 10 kΩ). Fórmula y cuentas: `docs/especificacion_adc.md` §3.1 y §3.2. *Propuesto el 2026-10-30* | T-09 | propuesta (depende del resultado de 4.16) |
 
 Ya decididos por la persona el 2026-10-21 (anotados en `docs/criterios_diseno.md` §10): CRC-8 en lugar de XOR; PWM de auto-cero con 10 bits directos; cálculo del filtro RC aplazado.
 

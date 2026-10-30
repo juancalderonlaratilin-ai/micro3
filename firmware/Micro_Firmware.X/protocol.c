@@ -1,7 +1,8 @@
 /* [T-04] protocol.c: protocolo de tramas de 9 bytes con CRC-8 sobre la UART.
  * Paso 5 de 5: arma y envía tramas (frame_send), las recibe con un parser (parser_feed), responde
  * PING -> PONG y avisa con ERROR 1 (CRC malo), ERROR 2 (TYPE desconocido), ERROR 3 (se perdieron
- * bytes por overflow del buffer de RX) y ERROR 4 (byte con error de hardware). */
+ * bytes por overflow del buffer de RX) y ERROR 4 (byte con error de hardware).
+ * [T-09] Además: ADC_STREAM -> ADC_ACK (enciende o apaga el envío) y DATA_IQ (pares I, Q). */
 
 #include "protocol.h"
 #include "crc8.h"
@@ -21,6 +22,10 @@ typedef enum { ESPERA_A5, ESPERA_5A, CUERPO } ParserState;
 static ParserState parserState;           /* estado actual del parser */
 static uint8_t rxFrame[PROTO_FRAME_LEN];  /* la trama que se está juntando, byte a byte */
 static uint8_t rxIndex;                   /* en qué posición de rxFrame va el próximo byte */
+
+/* [T-09] Envío de DATA_IQ. */
+static bool streamOn;  /* true = el PC pidió el envío de DATA_IQ (ADC_STREAM con P0 != 0) */
+static uint8_t iqSeq;  /* SEQ propio de las tramas DATA_IQ: 0 a 255 y vuelve a 0 */
 
 /* [T-04] frame_send
  * Para qué sirve: armar una trama de 9 bytes, calcularle el CRC y encolarla para enviar.
@@ -97,6 +102,26 @@ static void handle_ping(const uint8_t *frame)
     frame_send(PROTO_TYPE_PONG, frame[3], &frame[4]);
 }
 
+/* [T-09] handle_adc_stream
+ * Para qué sirve: encender o apagar el envío de DATA_IQ y confirmarlo con un ADC_ACK que lleva
+ *                 el mismo SEQ de la petición y, en P0, el estado resultante (0 o 1).
+ * Quién la llama: process_frame, desde main (nunca la ISR).
+ * Parámetros:     frame - la trama ADC_STREAM completa y ya verificada (9 bytes).
+ * Devuelve:       nada.   Variables: escribe streamOn. */
+static void handle_adc_stream(const uint8_t *frame)
+{
+    uint8_t payload[PROTO_PAYLOAD_LEN]; /* P0 = estado; P1 a P3 = 0 */
+
+    /* frame[4] es P0 de la petición: 0 = detener; cualquier otro valor = iniciar. */
+    streamOn = (frame[4] != 0);
+
+    payload[0] = streamOn ? 1 : 0;
+    payload[1] = 0;
+    payload[2] = 0;
+    payload[3] = 0;
+    frame_send(PROTO_TYPE_ADC_ACK, frame[3], payload);
+}
+
 /* [T-04] process_frame
  * Para qué sirve: revisar el CRC de una trama completa (evento PE3) y, si es buena, hacer lo
  *                 que pide su TYPE (despacho).
@@ -121,6 +146,11 @@ static bool process_frame(const uint8_t *frame)
     if (frame[2] == PROTO_TYPE_PING)
     {
         handle_ping(frame);
+    }
+    else if (frame[2] == PROTO_TYPE_ADC_STREAM)
+    {
+        /* [T-09] El PC enciende o apaga el envío de DATA_IQ. */
+        handle_adc_stream(frame);
     }
     else
     {
@@ -234,6 +264,37 @@ void protocol_init(void)
 {
     /* Estado de arranque: en reposo, esperando el primer 0xA5. */
     parser_reset();
+
+    /* [T-09] El envío de DATA_IQ arranca apagado: hasta que el PC mande ADC_STREAM con P0 = 1
+     * solo llegan respuestas, y las pruebas del protocolo (2.1 a 2.8) siguen igual. */
+    streamOn = false;
+    iqSeq = 0;
+}
+
+bool protocol_stream_on(void)
+{
+    return streamOn;
+}
+
+bool protocol_send_iq(uint16_t i, uint16_t q)
+{
+    uint8_t payload[PROTO_PAYLOAD_LEN]; /* I en P0:P1 y Q en P2:P3 */
+    bool ok;                            /* si la trama cupo en el buffer de TX */
+
+    /* Big-endian: primero el byte alto. ">> 8" baja los 4 bits altos del valor de 12 bits al
+     * byte bajo; "& 0xFF" se queda con los 8 bits bajos. */
+    payload[0] = (uint8_t)(i >> 8);
+    payload[1] = (uint8_t)(i & 0xFF);
+    payload[2] = (uint8_t)(q >> 8);
+    payload[3] = (uint8_t)(q & 0xFF);
+
+    ok = frame_send(PROTO_TYPE_DATA_IQ, iqSeq, payload);
+
+    /* El SEQ sube aunque la trama no haya cabido: así el PC ve un salto de SEQ y se entera de
+     * que se perdió una (prueba 4.14). Al pasar de 255 vuelve solo a 0 (uint8_t). */
+    iqSeq++;
+
+    return ok;
 }
 
 void protocol_task(void)

@@ -48,6 +48,8 @@
 
 #include "interrupt_manager.h"
 #include "mcc.h"
+// [C-11] Declara adc_iq_isr() (T-09). adc_iq.h está en la carpeta del proyecto, un nivel arriba.
+#include "../adc_iq.h"
 
 void __interrupt() INTERRUPT_InterruptManager (void)
 {
@@ -63,6 +65,12 @@ void __interrupt() INTERRUPT_InterruptManager (void)
         {
             // [C-06] Llamada directa a la ISR de RX (antes: a través del puntero EUSART1_RxDefaultInterruptHandler)
             EUSART1_Receive_ISR();
+        }
+        else if(PIE1bits.ADIE == 1 && PIR1bits.ADIF == 1)
+        {
+            // [C-11] Llamada directa a la ISR del ADC de T-09, que baja ADIF (antes: ADCC_ISR(),
+            // que llamaba por el puntero ADCC_ADI_InterruptHandler a una función vacía)
+            adc_iq_isr();
         }
         else
         {

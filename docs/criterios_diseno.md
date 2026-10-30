@@ -251,7 +251,8 @@ Fuente de los niveles del CP2102: datasheet del CP2102-GMR (Silicon Labs), secci
 8. Valor `VBOR` del brown-out (el MCC de clase usó `BORV = LO`, 2,45 V).
 9. Con qué ADC y `Vref` calculó el profesor los 352 µV (corresponden a 12 bits y 5 V; con 3,7 V son 261 µV).
 10. Cómo se mide el SINAD > 60 dB: sobre el ADC con una senoidal casi a escala completa (lo que se adoptó) o sobre la señal real de PCB2 (±185 mV, donde un 12 bits ideal da 54 dB), y a qué frecuencias.
-11. Unidad de `ADACQ` (10 µs o 320 µs; prueba 4.16) y duración de las ISR de la UART, que fija el jitter del disparo de Q.
+11. Unidad de `ADACQ` (10, 40 o 320 µs; prueba 4.16) y duración de las ISR de la UART, que fija el jitter del disparo de Q.
+12. Modelo e impedancia de salida (`Zout`) del opa de I y Q de PCB2 (datasheet del MCP604 en `docs/MCP601-2.PDF`, sin número de `Zout`) y si `Vref` se queda en `VDD` (`docs/especificacion_adc.md` §3.2 y §7.1).
 
 ---
 
@@ -288,6 +289,10 @@ Fuente de los niveles del CP2102: datasheet del CP2102-GMR (Silicon Labs), secci
 | Promedio | 5 pares | Baja el ruido hasta 7 dB si el ruido es blanco y ≥ 0,5 LSB. Atenúa solo 0,14 dB a 20 Hz [CÁLCULO]. 200 tramas/s = 15,6 % de la línea | `N = 1`: 1000 tramas/s = 78 % de la línea (solo para el histograma) |
 | ISR del ADC | llamada directa desde `interrupt_manager.c` (C-11) | Mismo criterio que C-06: no se cambia la función en ejecución, y se ahorra el salto indirecto | Puntero `ADCC_ADI_InterruptHandler` de MCC |
 | SINAD | > 60 dB | Requisito de la persona. Un 12 bits ideal da 74 dB a escala completa: 14 dB de margen para ruido, jitter, referencia y distorsión | – |
+| Disparo del ADC | `ADACT` = `00010` (`TMR0_overflow`) | Periodo exacto por hardware (`TMR0H` = 249 → 1000 µs), sin recargar por software. El Timer2 es del PWM. `ADACT` solo elige una fuente, así que Q lo arranca la ISR | Timer1/3/5 (16 bits: recarga por software), PWM6/7 (15,6 kHz), pin externo, escribir `ADPCH` o leer `ADRESH` (software, con jitter). Timer4 y Timer6 también servirían (`docs/especificacion_adc.md` §2.1) |
+| Origen de `Vref` | `VDD`, o sea generada por la PIC (`ADPREF` = 00) | Sin pines ni piezas; ratiométrica con `Vref2` (mismo riel): el rizado de `VDD` no mueve el código de reposo [PROPUESTA; falta confirmar] | FVR (no puede superar `VDD`; 2,048 V recorta; no es ratiométrica) y pin `VREF+` (RA1 es ICSPCLK). Ver `docs/especificacion_adc.md` §7.1 |
+| Tiempo de adquisición | `TACQ = 2 µs + CHOLD·(RIC + RSS + RS)·ln(8191) + 0,05 µs/°C·(T − 25)`; `ADACQ` = ⌈1,2·`TACQ` / `T_unidad`⌉ | Fórmula del datasheet (p.506–507); con `RS` = 10 kΩ y 50 °C: 8,55 µs, o sea `ADACQ` = 6 si `T_unidad` = 2 µs [PROPUESTA] | `ADACQ = 160` (10, 40 o 320 µs) hasta medir la unidad (prueba 4.16). Cuentas en `docs/especificacion_adc.md` §3.1 |
+| `RS`: impedancia de salida del opa de I y Q | por leer del datasheet del opa; ≤ 10 kΩ | Entra en `TACQ` y fija la recuperación del opa tras el golpe de carga (`docs/especificacion_adc.md` §3.2) | – |
 
 **Resolución:** 12 bits (DS `AD01`, p.632). El LSB es 0,903 mV y el ruido de cuantización ideal 261 µV con 3,7 V. **El SINAD depende de la amplitud:** con la señal real de PCB2 (±185 mV) un 12 bits ideal da 54 dB, por eso en §9 queda pendiente cómo se entiende el requisito.
 

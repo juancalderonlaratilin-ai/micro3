@@ -36,14 +36,14 @@ main:   adc_iq_get() ──► promedio de 5 ──► protocol_send_iq() ──
 
 | Dato | Valor | Dónde / fuente |
 |---|---|---|
-| Disparo | `ADACT = 0x02` = *TMR0_overflow* (DS Tabla 32-6, p.538) | `adcc.c` |
+| Disparo | `ADACT = 0x02` = *TMR0_overflow* (DS Tabla 32-6, p.538); ver §2.1 | `adcc.c` |
 | Timer0 | 8 bits, reloj Fosc/4 = 4 MHz, prescaler 1:16 → 250 kHz, `TMR0H = 249` → 250 cuentas × 4 µs = **1000 µs** [CÁLCULO] | `tmr0.c` (`T0CON1 = 0x44`, `T0CON0 = 0x80`) |
 | Reloj del ADC | `ADCLK = 0x0F` → Fosc/32 → `TAD = 2 µs` | `adcc.c`; MCC lo confirma |
 | Conversión | `14·TAD + 2·TCY = 28,5 µs` (`AD22`, DS p.633) [CÁLCULO] | MCC: 28,5 µs |
 | Adquisición | `ADACQ = 160` | **ver §3: 10 µs o 320 µs** |
 | Resultado | 12 bits, justificado a la derecha (`ADFM`), modo básico (`ADCON2 = 0`) | `adcc.c` |
 | Canales | `CANAL_I = 0x10` (RC0/ANC0), `CANAL_Q = 0x11` (RC1/ANC1) (DS p.528) | `adcc.h` |
-| Referencia | `ADREF = 0x00`: `ADPREF = VDD`, `ADNREF = VSS` | `adcc.c` |
+| Referencia | `ADREF = 0x00`: `ADPREF = VDD`, `ADNREF = VSS`; ver §7.1 | `adcc.c` |
 | Interrupción | `ADIE = 1`; `interrupt_manager.c` llama a `adc_iq_isr()` si `ADIE` y `ADIF` | cambio C-11 (§11) |
 | Promedio | `ADC_N_PROMEDIO = 5` (decisión D-1): 1 kHz de muestreo y 200 promedios/s | `adc_iq.h` |
 | Pin de prueba | `ADC_PIN_PRUEBA = 1`: RC2 sube mientras corre `adc_iq_isr()` (D-4) | `adc_iq.h` |
@@ -53,19 +53,129 @@ Las divisiones del promedio las hace `main` (`adc_iq_get`), no la ISR. El acumul
 
 **Cuidado con el modo actual de `main.c`:** el `main.c` copiado del zip trae `MODO_PRUEBA_ADC = 1`. Con eso el bucle solo manda texto para el Serial Plotter (§9) y **no atiende el protocolo ni el eco**. Para volver al protocolo hay que poner 0 y recompilar.
 
+### 2.1 Fuente de disparo (`ADACT`): cuál usamos y por qué
+
+**Usamos `ADACT.ACT` = `00010` = `TMR0_overflow`** (DS Tabla 32-6, p.538; el código escribe `ADACT = 0x02`). Cada vez que el Timer0 desborda, el hardware pone `GO` y arranca la conversión del canal que esté en `ADPCH` (I). `ADACT` solo elige **una** fuente a la vez; por eso Q no se puede disparar por hardware con otra y lo arranca la ISR con `ADGO = 1` (de ahí el jitter de Q, §4).
+
+**Por qué el Timer0:**
+
+1. **Periodo exacto por hardware.** En modo de 8 bits el Timer0 compara `TMR0L` con `TMR0H` y, al coincidir, se reinicia (DS p.261). Con `TMR0H = 249`, reloj Fosc/4 (`T0CS` = 010, Tabla 18-1, p.267) y prescaler 1:16 (`T0CKPS` = 0100) salen 250 cuentas × 4 µs = **1000 µs** sin que el software recargue nada ni entre en una interrupción de timer. [VERIFICADO + CÁLCULO]
+   - **No hay recarga por software, así que no aporta jitter.** En modo de 8 bits el Timer0 reinicia `TMR0L` solo, por hardware, cuando coincide con `TMR0H` (DS p.261); `TMR0H` es el registro de periodo y no se toca. Ninguna parte del firmware llama a `TMR0_Reload` ni a `TMR0_WriteTimer`, y `TMR0IE` no se habilita. [VERIFICADO en el código del zip] Aquí la palabra «overflow» de la tabla del DS significa «coincidencia», no un paso de 255 a 0.
+   - Si en cambio se recargara el timer desde una ISR, cada periodo se alargaría lo que tarde la CPU en llegar a esa escritura (latencia de interrupción variable: hay un solo vector y la ISR de la UART puede estar corriendo), y el instante de disparo de I sí tendría jitter. [CÁLCULO]
+   - **Duda [SIN VERIFICAR]:** el DS dice que el ADC arranca con el *flanco de subida* de la fuente (p.504) y que `TMR0_out` *conmuta* en cada coincidencia con postscaler 1:1 (§18.3.2, p.262). No dice si el `TMR0_overflow` de la Tabla 32-6 es el pulso de cada coincidencia (periodo de 1000 µs) o la salida que conmuta (un flanco de subida cada 2 coincidencias: 2000 µs). Se resuelve con la prueba 4.5: si el periodo entre los pulsos de I sale 2000 µs, hay que poner `TMR0H` = 124 (125 cuentas × 4 µs = 500 µs por coincidencia).
+2. **Es el timer que sobra.** El Timer2 está reservado para el PWM6/PWM7 del auto-cero (`T2PR` = 255, 15,625 kHz) y ese periodo no sirve para 1 ms. La especificación de diseño ya reservaba «Timer 1 o Timer 0» para el disparo del ADC (`especificacion_diseno_uart.md` §4). Ningún otro módulo del código actual usa el Timer0.
+3. **Cumple la regla del proyecto:** sin esperas ni retardos por software.
+
+No está escrito en ningún documento por qué se prefirió el Timer0 al Timer4 o al Timer6, que también servirían (la instrucción original del ADC no está en la carpeta). [SIN VERIFICAR: motivo exacto de esa elección]
+
+**Todas las fuentes posibles** (DS Tabla 32-6, p.538) y por qué no se usan:
+
+| `ACT` | Fuente | ¿Sirve para 1 kHz? | Motivo |
+|---|---|---|---|
+| **`00010`** | **`TMR0_overflow`** | **Sí: la que usamos** | periodo fijado por hardware (§2.1, punto 1) |
+| `00100`, `00110`, `01000` | `TMR2`, `TMR4`, `TMR6` *postscaled* | Sí, técnicamente | también tienen registro de periodo; Timer2 es del PWM; Timer4 y Timer6 quedan libres como alternativa |
+| `00011`, `00101`, `00111` | `TMR1`, `TMR3`, `TMR5` *overflow* | No es cómodo | son de 16 bits y desbordan cada 65 536 cuentas: para 1 ms habría que recargarlos por software en cada vuelta |
+| `01010` a `01101` | `CCP1` a `CCP4` *trigger* | Posible, más complejo | no se estudió; no compensa teniendo el Timer0 |
+| `01110`, `01111` | `PWM6_out`, `PWM7_out` | No | siguen el periodo del PWM (15,6 kHz) y esos módulos son del auto-cero |
+| `00001` | pin de `ADACTPPS` | No | pide un pin libre y un generador externo |
+| `10000` a `10111` | `NCO1`, `C1`, `C2`, cambio de pin (IOC), `CLC1` a `CLC4` | No | no son un reloj de 1 kHz |
+| `11111`, `11101`, `11100` | escribir `ADPCH`, leer `ADRESH`, leer `ADERRH` | No | los dispara el software: tienen jitter |
+| `00000` | desactivado | Solo para `ADGO` por software | así se arranca Q |
+
 ## 3. Presupuesto de tiempo (R2: menos de 1 ms)
 
 Por cada canal: `T_canal = T_acq + T_conv`. Con dos canales en ráfaga: `T_total = 2·T_canal` más la latencia de la ISR.
 
 | Caso | `T_acq` | `T_conv` | Por canal | I + Q | Margen sobre 1 ms |
 |---|---|---|---|---|---|
-| **A.** `ADACQ` cuenta ciclos de Fosc (lo que supone el comentario de `adc_iq.c`, línea 101) | 10 µs | 28,5 µs | 38,5 µs | **77 µs** | 923 µs |
+| **A.** `ADACQ` cuenta ciclos de Fosc (lo que guarda MCC: `AquisitionTime` = 10 µs en el `.mc3`) | 10 µs | 28,5 µs | 38,5 µs | **77 µs** | 923 µs |
 | **B.** `ADACQ` cuenta periodos del reloj del ADC, es decir `TAD` (lo que dice el DS p.529: «*Number of ADC clock periods*») | 160 × 2 µs = 320 µs | 28,5 µs | 348,5 µs | **697 µs** | 303 µs (30 %) |
 
 - **Los dos casos cumplen R2.** El peor caso (B) deja el 30 % de margen.
-- **Duda [SIN VERIFICAR]:** la figura 32-2 del DS rotula la adquisición como «1-8191 `TCY`» (DS p.501) y el texto del registro en periodos del reloj del ADC (p.529). El comentario de `adc_iq.c` supone 10 µs; no se pudo ver qué muestra la ventana de MCC. Se resuelve midiendo (prueba 4.16): la separación entre los dos pulsos de RC2 es ≈ 38,5 µs en el caso A y ≈ 349 µs en el B.
+- **Duda [SIN VERIFICAR]:** la figura 32-2 del DS rotula la adquisición como «1-8191 `TCY`» (DS p.501) y el texto del registro en periodos del reloj del ADC (p.529). MCC guarda 10 µs (`AquisitionCount` = 160 y `AquisitionTime` = 10 µs en el `.mc3`: divide entre 16 MHz). Si contara `TCY` (250 ns) serían 40 µs, un tercer caso con ≈ 68,5 µs entre pulsos. Se resuelve midiendo (prueba 4.16): la separación entre los dos pulsos de RC2 es ≈ 38,5 µs en el caso A y ≈ 349 µs en el B.
 - **Si resulta ser el caso B**, la adquisición de 320 µs es excesiva: `AD23` pide `TACQ` típico de 2 µs (DS p.633) y `AD08` recomienda una fuente de ≤ 10 kΩ (DS p.632). Ver el sesgo entre I y Q en §10 y el cambio propuesto CP-7.
 - El disparo automático no garantiza los tiempos: *«It is the user's responsibility to ensure that the ADC timing requirements are met»* (DS §32.2.6).
+
+### 3.1 Fórmula del tiempo de adquisición y del `ADACQ`
+
+Fuente: DS §32.3 y Ecuación 32-1 (p.506–507). Es el tiempo que necesita el capacitor de retención `CHOLD` para cargarse hasta quedar a **½ LSB** (4096 pasos) del voltaje del pin. El interruptor de muestreo está cerrado ese tiempo; después se abre y empieza la conversión.
+
+```
+TACQ  = TAMP + TC + TCOFF
+TC    = − CHOLD · (RIC + RSS + RS) · ln( 1 / (2^(n+1) − 1) )      con n = 12:  ln(8191) = 9,011
+TCOFF = (T − 25 °C) · 0,05 µs/°C
+ADACQ = ceil( margen · TACQ / T_unidad )
+```
+
+| Símbolo | Valor | Fuente / estado |
+|---|---|---|
+| `CHOLD` | 28 pF | DS Fig. 32-4, p.506 [VERIFICADO] |
+| `RIC` | 1 kΩ | DS Fig. 32-4 [VERIFICADO] |
+| `RSS` | 7 kΩ a 5 V; sube al bajar `VDD`. A 3,7 V se usa **10 kΩ** | la gráfica de la Fig. 32-4 no se lee en el texto del PDF: valor conservador [SIN VERIFICAR] |
+| `RS` | impedancia que ve el pin: la salida del opa de PCB2 más lo que haya en serie. Máximo recomendado 10 kΩ (`AD08`, p.632) | ver §3.2 |
+| `TAMP` | 2 µs (asentamiento del amplificador interno) | DS Ec. 32-1 [VERIFICADO] |
+| `TCOFF` | 0,05 µs por °C sobre 25 °C | DS Ec. 32-1 [VERIFICADO] |
+| `T_unidad` | 2 µs (`TAD`) si `ADACQ` cuenta periodos del reloj del ADC (DS p.529); 62,5 ns si es como lo guarda MCC | [SIN VERIFICAR] hasta la prueba 4.16 (§3) |
+| `margen` | 1,2 | [PROPUESTA] |
+
+[CÁLCULO] La fórmula reproduce el ejemplo del datasheet: con `RS` = 10 kΩ, `RSS` = 7 kΩ y 50 °C da 7,79 µs, igual que el DS. Con `RSS` = 10 kΩ y `TAD` = 2 µs:
+
+| `RS` | `TACQ` a 25 °C | `TACQ` a 50 °C | `ADACQ` mínimo a 50 °C | con 20 % de margen |
+|---|---|---|---|---|
+| 200 Ω (opa, estimado) | 4,83 µs | 6,08 µs | 4 (8 µs) | 4 (8 µs) |
+| 1 kΩ | 5,03 µs | 6,28 µs | 4 (8 µs) | 4 (8 µs) |
+| 10 kΩ (máximo recomendado) | 7,30 µs | 8,55 µs | 5 (10 µs) | **6 (12 µs)** |
+
+A 85 °C y con 10 kΩ saldrían 10,3 µs: con `ADACQ` = 6 sigue cumpliendo. Los 200 Ω son una estimación mía, no un dato del datasheet.
+
+```python
+from math import log, ceil
+
+def t_acq_us(rs_ohm, rss_ohm=10e3, ric_ohm=1e3, chold_f=28e-12, bits=12, temp_c=50.0, t_amp_us=2.0):
+    """Tiempo de adquisición mínimo en µs (DS Ec. 32-1, p.506-507)."""
+    tc_us = chold_f * (ric_ohm + rss_ohm + rs_ohm) * log(2**(bits + 1) - 1) * 1e6
+    return t_amp_us + tc_us + (temp_c - 25.0) * 0.05
+
+def adacq(rs_ohm, unidad_us=2.0, margen=1.2, **kw):
+    """Valor para el registro ADACQ. unidad_us = 2.0 si cuenta periodos de TAD."""
+    return ceil(margen * t_acq_us(rs_ohm, **kw) / unidad_us)
+```
+
+**Por qué no acortarlo más.** `CHOLD` no se descarga entre conversiones (DS p.507, nota 2): al pasar de I a Q conserva el voltaje de I. Lo que no se asiente queda como error entre canales: `residuo = ΔV · e^(−t/τ)`, con `τ = CHOLD·(RIC + RSS + RS)`. Para que el residuo sea menor que ½ LSB hacen falta `t ≥ τ·ln(ΔV / ½ LSB)`: 6,7 τ para un escalón de 0,37 V (410 LSB, el rango lineal de PCB2) y 8,9 τ para 3,4 V (la senoidal de la prueba 4.15). El presupuesto total de ruido para SINAD > 60 dB es de solo 1,45 LSB rms (§6).
+
+**Con el valor actual** (`ADACQ = 160`): 10 µs cumplen el peor caso de 8,55 µs con poco margen (17 %); 40 µs sobran; 320 µs sobran 37 veces y solo empeoran el sesgo entre I y Q (§10). El cambio CP-7 de `MASTER_PLAN.md` aplica esta fórmula una vez medida la unidad (prueba 4.16).
+
+### 3.2 Impedancia de salida del opa (`RS` de la fórmula): hay que tenerla en cuenta
+
+`RS` no es la resistencia de un cable. Es **la impedancia que ve el pin del ADC**: para RC0 y RC1 es la **salida del amplificador operacional de la etapa final de PCB2** (resta + ganancia, preinforme ec. 5), más cualquier resistencia o filtro RC que haya en serie o en el pin. Hay que tenerla en cuenta por tres motivos:
+
+1. **Entra directo en `TC`** (§3.1). Cada 1 kΩ de `RS` suma ≈ 0,25 µs a `TACQ` [CÁLCULO].
+2. **La impedancia de salida de un opa no es constante.** En lazo cerrado vale aproximadamente `Ro / (1 + A(f)·β)`: es muy baja en continua y sube hacia `Ro` cuando la ganancia del lazo cae con la frecuencia. El golpe de carga de `CHOLD` al cerrarse el interruptor ocurre en cientos de kHz a MHz, donde la impedancia es mayor que la de continua. [teoría estándar; no se verificó en ningún datasheet]
+3. **El opa tiene que recuperarse del golpe de carga.** Su ancho de banda en lazo cerrado es `GBW / ganancia de ruido`. La etapa final usa 100 kΩ / 10 kΩ, o sea ganancia de ruido 11. Con los `GBW` del documento de cambios de op-amps del proyecto [CÁLCULO, un solo polo]. El del MCP604 (2,8 MHz) está comprobado en su datasheet (DS21314G, p.3); los de TS924A y TLV9064 no se comprobaron:
+
+| Opa | `GBW` | Ancho de banda con ganancia 11 | `τ` | 9 `τ` |
+|---|---|---|---|---|
+| TS924A (ST) | 4 MHz | 364 kHz | 0,44 µs | 3,9 µs |
+| MCP604 (Microchip) | 2,8 MHz | 255 kHz | 0,62 µs | 5,6 µs |
+| TLV9064 (TI) | 10 MHz | 909 kHz | 0,18 µs | 1,6 µs |
+
+El golpe de carga es pequeño y no un escalón completo, así que 9 `τ` es una cota alta. Aun así es del orden del `TACQ` de §3.1: **no hay que recortar `T_acq`** y hay que medirlo (prueba 4.8).
+
+**Lo que dice el datasheet del MCP604** (`docs/MCP601-2.PDF`, MCP601/1R/2/3/4, DS21314G) [VERIFICADO]:
+
+- **No da un número de impedancia de salida.** Solo dice que «las salidas del opa son fuentes de voltaje de baja impedancia» (§3.1, p.11). Para tener un valor hay que simular con su modelo SPICE (§5.1) o medir.
+- Con ganancia +1: `GBWP` 2,8 MHz típ., margen de fase 50°, slew rate 2,3 V/µs y tiempo de asentamiento al 0,01 % de 4,5 µs para un escalón de 3,8 V, medido con `RL` = 100 kΩ y `CL` = 50 pF (p.3).
+- Corriente de cortocircuito ±22 mA a 5,5 V y ±12 mA a 2,7 V (p.2). A 3,7 V no está especificada.
+- **Cargas capacitivas** (§4.4, p.13): con ganancia +1 y más de 40 pF recomienda una resistencia en serie `RISO` en la salida. El pin del ADC ya presenta ≈ 33 pF (`CHOLD` 28 pF + `CPIN` 5 pF), más la capacitancia de la pista y de la punta del osciloscopio. Esa `RISO` se suma a `RS`. Con ganancia de ruido 11 la estabilidad es más fácil [teoría estándar], pero conviene comprobarla en simulación y en la placa.
+
+**Qué hay que hacer** [PROPUESTA]:
+
+- [ ] Anotar el modelo del opa de la etapa final de I y Q. Según `CAMBIOS_OPAMPS_Y_AMPLITUDES_2026-10-16.md` (en el proyecto de Claude, no está en `docs/`), hoy PCB2 usa TS924A y la BOM puede pasar a MCP604 o TLV9064.
+- [x] Datasheet del MCP604 en `docs/MCP601-2.PDF` (lo puso la persona el 2026-10-30). Los de TS924A y TLV9064, si se usan, faltan. **Aviso:** `.gitignore` tiene `docs/*.pdf` (PDFs pesados de fabricante), así que los PDF no se suben a GitHub salvo con `git add -f`.
+- [ ] Conseguir un número de `Zout`: el datasheet del MCP604 **no lo da**. Opciones [PROPUESTA]: simular la etapa final en LTspice con el modelo SPICE del MCP604 (impedancia de salida contra frecuencia, a ≈ 1 MHz) o medir en la placa cuánto cambia el voltaje de salida al conectar una carga conocida. Anotar el valor como `RS`.
+- [ ] Sumar a `RS` cualquier resistencia en serie o RC antialias en el pin del PIC.
+- [ ] Recalcular §3.1 con ese `RS` y fijar `ADACQ`.
+- [ ] Comprobar con la prueba 4.8, **también con la salida real de PCB2** y no solo con el generador.
 
 ## 4. Jitter (R7)
 
@@ -192,6 +302,29 @@ Comprobado con capturas sintéticas (12 bits, 3,7 V, 1,7 V de amplitud): sin rui
 - TI (Cap. 6, págs. 65–79) trata el ruido de la fuente con el PSRR. Para mejorarlo propone optimizar el *layout* y planificar las frecuencias; para depurar, agregar un LDO, comprobar las especificaciones de la fuente, aumentar los capacitores de desacoplo del ADC y **reemplazar las fuentes por una de banco, una por una** (p.79). El LDO y el desacoplo son lo aplicable aquí; el análisis de TI es de ADC delta-sigma.
 - El rizado de los trimmers sustituidos por PWM se multiplica por 10 en la etapa de resta (preinforme ec. 5). Para quedar bajo 1 LSB (0,9 mV) hace falta ≲ 90 µV pp en I0/Q0 (es el CP-2 de `MASTER_PLAN.md`).
 
+### 7.1 Origen de `Vref`: dentro de la PIC o referencia externa
+
+**No confundir las dos «referencias» del proyecto:**
+
+- `Vref` y `Vref2` de PCB2 (≈ 1,85 V) son buffers del divisor del riel: son la **tierra virtual** de las señales y fijan el nivel de reposo de I y Q (preinforme §1.2). **No** son la referencia del ADC.
+- `VREF+` del ADC es el voltaje de fondo de escala: el código es `Vin / VREF+ × 4096`. Se elige con `ADREF` (`ADPREF`, DS p.537).
+
+| Opción | `ADPREF` | La genera | A favor | En contra |
+|---|---|---|---|---|
+| **`VDD` (la actual)** | `00` | la PIC (su alimentación) | no usa pines ni piezas; cubre 0 a 3,7 V; **ratiométrica** con `Vref2`, que sale del mismo riel | el ruido de `VDD` entra directo en la medida |
+| FVR de 1,024 / 2,048 / 4,096 V | `11` | la PIC (referencia interna) | independiente de `VDD` (DS p.491) | no puede superar `VDD`: 4,096 V no sirve; 2,048 V recorta la señal; **no es ratiométrica** |
+| Pin `VREF+` (referencia externa) | `10` | un CI de referencia en la placa | estabilidad y ruido bajo si el CI es bueno | usa RA1, que es ICSPCLK: choca con la programación y depuración del SNAP (regla del proyecto: no usar RA0, RA1 ni RA3); pieza y pista extra |
+
+[CÁLCULO] **Por qué importa lo de ratiométrica.** Si `VDD` tiene 10 mV de rizado, `Vref2` (la mitad de `VDD`) se mueve 5 mV. Con `VDD` como referencia el código de reposo no cambia (siempre 2048); con el FVR de 2,048 V el código se movería ≈ 10 LSB. Supuesto: `Vref2` sale de un divisor del mismo riel que alimenta la PIC.
+
+**Decisión actual:** `VDD` [PROPUESTA ya adoptada en el código; falta confirmarla con el profesor]. Condición: `VDD` limpio (LDO y desacoplo, §14).
+
+**Cómo decidir con datos** [PROPUESTA]:
+
+1. Medir el ruido de `VDD` en el pin de la PIC (osciloscopio con acople AC y límite de ancho de banda) y compararlo con el criterio de ≤ 26 µV rms de §7.
+2. Comparar la σ del histograma (§8) con la entrada en 0 V y con la entrada en `Vref2`: la diferencia es lo que aporta la referencia y la fuente.
+3. Cambiar a FVR o a una referencia externa **solo si** la prueba 4.15 (SINAD) falla por culpa de la referencia y el choque con RA1 tiene solución.
+
 ## 8. Medición del ruido: histograma y conteo (R8)
 
 TI (págs. 11–13): es la medición de **ruido en DC** («input-short»): la entrada fija, el histograma de códigos es gaussiano, el ruido rms es una desviación estándar y el pico a pico es 6 o 6,6 σ. Con la entrada en 0 V **no entra** el ruido de la referencia (la razón `Vin/Vref` es cero, p.47); con la entrada en la mitad de la escala entra la mitad (Ec. 27 con %FS = 50 %).
@@ -283,20 +416,24 @@ El código cita `docs/instrucciones_claude_code_adc.md`, que **no estaba en la c
 6. Si PCB2 deja la entrada del ADC con baja impedancia (≤ 10 kΩ) y qué rizado de fuente tiene `VDD`.
 7. Resultados de la prueba del Serial Plotter (§9) y de las pruebas 4.x de `docs/protocolos_prueba.md`.
 8. El documento `docs/instrucciones_claude_code_adc.md` y la decisión D-3 (§12).
+9. Modelo del opa de las salidas I y Q de PCB2 (TS924A o MCP604) y su `Zout`: el datasheet del MCP604 ya está en `docs/MCP601-2.PDF` y no da el número (§3.2).
+10. Si `Vref` se queda en `VDD` o se pasa a FVR o a una referencia externa (§7.1).
+11. `RSS` a 3,7 V (gráfica de la Fig. 32-4 del DS) y por qué se eligió Timer0 y no Timer4 o Timer6 (§2.1, §3.1).
+12. Si el `TMR0_overflow` que dispara el ADC es el pulso de cada coincidencia (1000 µs) o la salida que conmuta (2000 µs); lo decide la prueba 4.5 (§2.1).
 
 ## 14. Recomendaciones
 
 **Hardware**
 - [ ] `VDD`/`VREF` desde un LDO limpio con desacoplo cercano (100 nF + 1 a 10 µF), lejos de reguladores conmutados.
 - [ ] Ninguna salida de PCB2 debe superar `VDD + 0,3 V`; resistencia en serie si hace falta.
-- [ ] Salida de PCB2 de baja impedancia (op-amp), ≤ 10 kΩ.
+- [ ] Salida de PCB2 de baja impedancia (op-amp), ≤ 10 kΩ. Anotar su `Zout` (§3.2).
 - [ ] Tierra analógica y digital unidas en un solo punto cerca del ADC; PWM, UART y reloj lejos de `V_I,OUT`, `V_Q,OUT` y la referencia.
 - [ ] Rizado de I0/Q0 ≲ 90 µV pp.
 - [ ] Revisar la red de 60 Hz: el filtro de 20 Hz la atenúa solo ≈ 20 dB [CÁLCULO, Butterworth ideal con `fn = 19,4 Hz`].
 
 **Firmware**
 - [ ] Disparo por Timer0 (ya está). Nada de retardos por software.
-- [ ] Confirmar `ADACQ` y bajarlo si la adquisición real es de 320 µs.
+- [ ] Confirmar `ADACQ` con la prueba 4.16 y calcularlo con la fórmula de §3.1 (con 20 % de margen); bajarlo si la adquisición real es de 320 µs.
 - [ ] Mantener cortas las ISR de la UART (pruebas 1.10 y 1.11) para el jitter de Q.
 - [ ] Detectar saturación (códigos cerca de 0 o 4095) y pasar a ERROR/ALARM.
 - [ ] `MODO_PRUEBA_ADC = 0` para volver al protocolo.
@@ -305,7 +442,8 @@ El código cita `docs/instrucciones_claude_code_adc.md`, que **no estaba en la c
 
 ## 15. Referencias
 
-- DS40001985C: cap. 32 (ADC2), p.501–540; AD01–AD23, p.632–633; FVR, cap. 30, p.491; Timer0, cap. 18, p.260.
+- DS40001985C: cap. 32 (ADC2), p.501–540; AD01–AD23, p.632–633; FVR, cap. 30, p.491; Timer0, cap. 18, p.260–261 y p.267; requisitos de adquisición y Ecuación 32-1, p.506–507; fuentes de disparo `ADACT`, p.538; `ADREF`, p.537.
+- Documento de cambios de op-amps (`CAMBIOS_OPAMPS_Y_AMPLITUDES_2026-10-16.md`, en el proyecto de Claude): modelos y `GBW` de TS924A, MCP604 y TLV9064. Datasheet del MCP604: `docs/MCP601-2.PDF` (DS21314G). Los de TS924A y TLV9064 no están en `docs/`.
 - Errata 80000799, punto 1.1.2 (ADCC con doble muestra): **no aplica**, porque el código usa el modo básico.
 - TI, *Fundamentals of Precision ADC Noise Analysis* (SLYY192A, Rev. A, marzo 2025, 83 páginas): Cap. 1 (págs. 4–22), Cap. 4 (46–57), Cap. 5 (58–64), Cap. 6 (65–79). Citas usadas, ya comprobadas en el PDF: Ec. 2 (p.7), Fig. 7a (p.10), Tablas 2 y 3 (págs. 13–15), Ec. 26 (p.47), Ec. 27 (p.49), Tabla 21 (p.56), Ec. 28 (p.59).
 - Preinforme de la Práctica 2: filtros de 20 Hz, `Vref2`, ecuaciones (5) y (8).

@@ -14,3 +14,7 @@ El planificador es Gemini. Tú implementas. Los roles y el flujo están en "Role
 - MCC: la persona puede usarlo. Una vez que el código generado se edita a mano, **no se vuelve a pulsar *Generate*** (reescribe los archivos).
 - Al terminar una tarea: márcala `implementada, sin probar`, actualiza `docs/estado.md` y dile a la persona qué compilar y qué pruebas de `docs/protocolos_prueba.md` ejecutar. Nunca marques una tarea como `probada` sin el resultado de la persona.
 - Commits: uno por tarea, con el ID en el mensaje (por ejemplo `T-03: UART sin esperas`). Hazlos solo cuando la persona lo pida.
+
+## Preinforme
+
+Antes de escribir o revisar cualquier preinforme, lee entero `docs/especificaciones_preinforme.md`: requisitos de la clase, valores del UART y el ADC, bloques, diagramas de tiempo, cumplimiento y estructura. Lo que no se midió va como «calculado» o «previsto», nunca como resultado.
