@@ -1,29 +1,21 @@
 /* [PRUEBA ADC] adc_prueba.c: prueba TEMPORAL; manda "I:xxxx,Q:xxxx\r\n" cada
  * PRUEBA_PARES_POR_LINEA pares (50 = 20 líneas por segundo) para el Serial Plotter.
- * Usa los pares que entrega adc_iq_get() (T-09): ya vienen promediados de ADC_N_PROMEDIO en
- * ADC_N_PROMEDIO. La copia con ADIE apagado un instante la hace adc_iq_get(). */
+ * Usa los pares que entrega adc_iq_get() (T-09): una sola muestra de I y una de Q, sin
+ * promediar. La copia con ADIE apagado un instante la hace adc_iq_get(). */
 
 #include "adc_prueba.h"
-#include "adc_iq.h"                       /* adc_iq_get() y ADC_N_PROMEDIO */
+#include "adc_iq.h"                       /* adc_iq_get() */
 #include "mcc_generated_files/eusart1.h"  /* tx_string() */
 
-/* [PRUEBA ADC] Cuántos promedios de adc_iq_get() hay que dejar pasar para sumar
- * PRUEBA_PARES_POR_LINEA pares: 50 / 5 = 10 con ADC_N_PROMEDIO = 5 (o 50 con N = 1). */
-#define ADC_PRUEBA_GRUPOS (PRUEBA_PARES_POR_LINEA / ADC_N_PROMEDIO)
-
-/* [PRUEBA ADC] Revisiones al compilar (#error detiene la compilación con el mensaje):
- * - si no es múltiplo, la línea no saldría cada PRUEBA_PARES_POR_LINEA pares exactos;
- * - "grupos" es de 8 bits, así que el cociente debe ir de 1 a 255. */
-#if (PRUEBA_PARES_POR_LINEA % ADC_N_PROMEDIO) != 0
-#error "PRUEBA_PARES_POR_LINEA debe ser múltiplo de ADC_N_PROMEDIO"
-#endif
-#if (ADC_PRUEBA_GRUPOS < 1) || (ADC_PRUEBA_GRUPOS > 255)
-#error "PRUEBA_PARES_POR_LINEA / ADC_N_PROMEDIO debe ir de 1 a 255"
+/* [PRUEBA ADC] Revisión al compilar (#error detiene la compilación con el mensaje):
+ * "pares" es de 8 bits, así que PRUEBA_PARES_POR_LINEA debe ir de 1 a 255. */
+#if (PRUEBA_PARES_POR_LINEA < 1) || (PRUEBA_PARES_POR_LINEA > 255)
+#error "PRUEBA_PARES_POR_LINEA debe ir de 1 a 255"
 #endif
 
 volatile uint16_t adcPruebaLineasPerdidas = 0; /* declarado en adc_prueba.h */
 
-static uint8_t grupos = 0; /* cuántos promedios han llegado desde la última línea */
+static uint8_t pares = 0; /* cuántos pares han llegado desde la última línea */
 
 /* [PRUEBA ADC] a_decimal
  * Para qué sirve: escribir un número de 0 a 9999 en decimal, sin ceros a la izquierda, sin
@@ -61,8 +53,8 @@ static uint8_t a_decimal(uint16_t v, char *dst)
 
 void adc_prueba_task(void)
 {
-    uint16_t i;     /* promedio del canal I (0 a 4095) */
-    uint16_t q;     /* promedio del canal Q */
+    uint16_t i;     /* muestra del canal I (0 a 4095) */
+    uint16_t q;     /* muestra del canal Q */
     char linea[16]; /* "I:4095,Q:4095\r\n" son 15 caracteres + el '\0' final */
     uint8_t n;      /* cuántos caracteres lleva la línea */
 
@@ -72,14 +64,14 @@ void adc_prueba_task(void)
         return;
     }
 
-    /* Se cuentan los promedios hasta juntar PRUEBA_PARES_POR_LINEA pares; solo entonces se
-     * manda una línea. */
-    grupos++;
-    if (grupos < ADC_PRUEBA_GRUPOS)
+    /* Se cuentan los pares hasta juntar PRUEBA_PARES_POR_LINEA; solo entonces se manda una
+     * línea con el último par. */
+    pares++;
+    if (pares < PRUEBA_PARES_POR_LINEA)
     {
         return;
     }
-    grupos = 0;
+    pares = 0;
 
     /* Se arma "I:" + I + ",Q:" + Q + "\r\n" carácter por carácter. */
     n = 0;

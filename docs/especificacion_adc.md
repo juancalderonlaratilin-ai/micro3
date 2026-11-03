@@ -30,8 +30,8 @@ Proyecto Micro 3 · Fase 2 · Fecha: 2026-10-30 · Estado: **código implementad
 ```
 Timer0 (cada 1 ms, por hardware) ──► ADGO = 1 ──► convierte I (RC0)
         adc_iq_isr: guarda I, ADPCH = Q, ADGO = 1 ──► convierte Q (RC1)
-        adc_iq_isr: guarda Q, ADPCH = I, suma el par ──► cada 5 pares avisa a main
-main:   adc_iq_get() ──► promedio de 5 ──► protocol_send_iq() ──► trama DATA_IQ (200/s)
+        adc_iq_isr: guarda Q, ADPCH = I, deja el par listo ──► avisa a main (cada 1 ms)
+main:   adc_iq_get() ──► protocol_send_iq() ──► trama DATA_IQ (1000/s, sin promedio)
 ```
 
 | Dato | Valor | Dónde / fuente |
@@ -45,11 +45,11 @@ main:   adc_iq_get() ──► promedio de 5 ──► protocol_send_iq() ──
 | Canales | `CANAL_I = 0x10` (RC0/ANC0), `CANAL_Q = 0x11` (RC1/ANC1) (DS p.528) | `adcc.h` |
 | Referencia | `ADREF = 0x00`: `ADPREF = VDD`, `ADNREF = VSS`; ver §7.1 | `adcc.c` |
 | Interrupción | `ADIE = 1`; `interrupt_manager.c` llama a `adc_iq_isr()` si `ADIE` y `ADIF` | cambio C-11 (§11) |
-| Promedio | `ADC_N_PROMEDIO = 5` (decisión D-1): 1 kHz de muestreo y 200 promedios/s | `adc_iq.h` |
+| Promedio | **ninguno** (desde el 2026-11-03; reemplaza D-1): una muestra de I y una de Q por par, 1000 pares/s | `adc_iq.c` |
 | Pin de prueba | `ADC_PIN_PRUEBA = 1`: RC2 sube mientras corre `adc_iq_isr()` (D-4) | `adc_iq.h` |
 | Contadores | `adcParesPerdidos` y `adcTramasPerdidas` deben quedar en 0 | `adc_iq.c`, `main.c` |
 
-Las divisiones del promedio las hace `main` (`adc_iq_get`), no la ISR. El acumulador es de 16 bits: 16 × 4095 cabe y 17 × 4095 no, por eso `ADC_N_PROMEDIO` va de 1 a 16 (`#error` si no).
+Sin promedio, ni la ISR ni `adc_iq_get` suman o dividen: la ISR deja el par listo al terminar Q y `adc_iq_get` lo copia con `ADIE` apagado. Si `main` tarda más de 1 ms en leerlo, el par se pierde y se cuenta en `adcParesPerdidos`.
 
 **Cuidado con el modo actual de `main.c`:** el `main.c` copiado del zip trae `MODO_PRUEBA_ADC = 1`. Con eso el bucle solo manda texto para el Serial Plotter (§9) y **no atiende el protocolo ni el eco**. Para volver al protocolo hay que poner 0 y recompilar.
 
@@ -201,7 +201,7 @@ Límite de TI (Cap. 5, Ec. 28): `SNR_jitter = −20·log10(2π·f_in·t_jitter)`
 
 Si la latencia varía entre 0 y `T`, el rms es `T/√12`. Con `T = 25 µs` (el objetivo de las pruebas 1.10 y 1.11) salen 7,2 µs rms → **61 dB** a 20 Hz y escala completa: se come todo el presupuesto de SINAD. Con `T = 8,7 µs` el costo baja a −70 dB. No se conoce la duración real de las ISR de la UART (pruebas 1.10 y 1.11 sin hacer), así que **se mide** con la prueba 4.17. Si no cumple, las ISR de la UART se acortan o el disparo de Q pasa a hardware (decisión del planificador).
 
-El promedio de 5 muestras reduce la parte aleatoria del jitter de Q. La del reloj de conversión no cuenta.
+Sin promedio (desde el 2026-11-03), el jitter de Q entra completo en cada muestra: antes el promedio de 5 reducía su parte aleatoria. La del reloj de conversión no cuenta.
 
 ## 5. Cuantización y resolución (R3, R6)
 
@@ -242,15 +242,15 @@ El promedio de 5 muestras reduce la parte aleatoria del jitter de Q. La del relo
 | 0,50 V | 62,6 dB |
 | **0,185 V (límite lineal de PCB2)** | **54,0 dB** |
 
-> **Advertencia.** Si el requisito se entiende como «60 dB con la señal real de PCB2» (±185 mV, el 10 % del rango), un ADC de 12 bits ideal da 54 dB y **no alcanza**; con el promedio de 5 muestras subiría a 61 dB solo si el ruido fuera blanco y de al menos 0,5 LSB. Si se entiende como una característica del **ADC**, medida con una senoidal casi a escala completa, un 12 bits ideal pasa con 14 dB de margen. En este documento se adopta la segunda lectura, que es la del enunciado («el SINAD del ADC»). **Hay que confirmarla con el profesor** (§13).
+> **Advertencia.** Si el requisito se entiende como «60 dB con la señal real de PCB2» (±185 mV, el 10 % del rango), un ADC de 12 bits ideal da 54 dB y **no alcanza**, y ya no hay promedio que lo suba (con el de 5 que había antes llegaba a 61 dB solo si el ruido era blanco y de al menos 0,5 LSB). Si se entiende como una característica del **ADC**, medida con una senoidal casi a escala completa, un 12 bits ideal pasa con 14 dB de margen. En este documento se adopta la segunda lectura, que es la del enunciado («el SINAD del ADC»). **Hay que confirmarla con el profesor** (§13).
 
 **Qué consume el presupuesto de 1,42 LSB rms:** el ruido de la referencia y de la fuente (§7), el jitter del disparo de Q (§4), la no linealidad del ADC (`AD02` ±1 LSb típ., ±2 máx.; `AD03` ±1 LSb; DS p.632, medidas a `VDD = 3 V` y `TAD = 1 µs`, no en nuestras condiciones), el rizado de los PWM de auto-cero (≈ 1 mV pp a la salida según `docs/especificacion_pwm.md`, que se pliega a la banda del ADC) y el ruido de PCB2. El offset y la ganancia (`AD04`, `AD05`, ±6 LSb máx.) **no** entran en el SINAD: son errores de continua.
 
 **Cómo se mide** [PROPUESTA]:
 
 1. Generador de funciones conectado **directo** al pin RC0 (y luego a RC1), a través de ≤ 10 kΩ, **sin PCB2**: el requisito es del ADC. Senoidal centrada en 1,85 V con 1,7 V de amplitud (sin recorte: de 0,15 V a 3,55 V). Se repite con una de 0,5 V para ver la dependencia.
-2. Frecuencias de 5 Hz y de 20 Hz (la banda del diseño). Para que quepan ciclos enteros: con `fs = 200 Hz`, `M = 4096` y `k = 410` ciclos, `f = 20,02 Hz`; con `k = 82`, `f = 4,004 Hz`. Si el generador no se puede sincronizar, la ventana de Kaiser del script reduce el error.
-3. Captura de 4096 pares por `DATA_IQ` (`ADC_N_PROMEDIO = 5`, 200 tramas/s, 21 s). Para el ADC puro se repite con `ADC_N_PROMEDIO = 1` (1000 tramas/s = 78 % de la línea; si `adcTramasPerdidas` sube, no vale esa captura).
+2. Frecuencias de 5 Hz y de 20 Hz (la banda del diseño). Para que quepan ciclos enteros: con `fs = 1000 Hz`, `M = 4096` y `k = 83` ciclos, `f = 20,26 Hz`; con `k = 21`, `f = 5,127 Hz` (`k` impar para que no se repitan códigos). Si el generador no se puede sincronizar, la ventana de Kaiser del script reduce el error.
+3. Captura de 4096 pares por `DATA_IQ` (sin promedio: 1000 tramas/s = 78 % de la línea, 4,1 s). Cada par ya es el ADC puro. Si `adcTramasPerdidas` sube o `SEQ` salta, no vale esa captura.
 4. Calcular con el script de abajo.
 
 ```python
@@ -296,7 +296,7 @@ Comprobado con capturas sintéticas (12 bits, 3,7 V, 1,7 V de amplitud): sin rui
 
 **Criterio propuesto** [PROPUESTA]: que la referencia aporte ≤ 10 % de `σq`. Con `σq = 261 µV`, `V_N,ref ≤ 26 µV rms` a escala completa. El total sube solo de 261 a 262 µV.
 
-> El PDF de TI analiza ADC **delta-sigma**, cuyo filtro digital limita el ancho de banda de ruido. El ADC del PIC es un **SAR sin ese filtro**: el ruido de banda ancha de `VDD` se muestrea y se pliega a 0–500 Hz. Se filtra con capacitores en el pin y con el promedio de 5.
+> El PDF de TI analiza ADC **delta-sigma**, cuyo filtro digital limita el ancho de banda de ruido. El ADC del PIC es un **SAR sin ese filtro**: el ruido de banda ancha de `VDD` se muestrea y se pliega a 0–500 Hz. Se filtra con capacitores en el pin (desde el 2026-11-03 ya no hay promedio digital).
 
 - Si `VREF = VDD`, un rizado de 10 mV en la fuente con `Vin/Vref = 0,5` aporta 5 mV, unos 5,5 LSB, **salvo que la señal también varíe con `VDD`**. `Vref2 ≈ 1,85 V` sale de un divisor del riel de 3,7 V (preinforme §1.2), así que el nivel de reposo es ratiométrico y esa parte se cancela [CÁLCULO, supuesto: ambos del mismo riel]. Solo la parte de la señal (±185 mV) no se cancela.
 - TI (Cap. 6, págs. 65–79) trata el ruido de la fuente con el PSRR. Para mejorarlo propone optimizar el *layout* y planificar las frecuencias; para depurar, agregar un LDO, comprobar las especificaciones de la fuente, aumentar los capacitores de desacoplo del ADC y **reemplazar las fuentes por una de banco, una por una** (p.79). El LDO y el desacoplo son lo aplicable aquí; el análisis de TI es de ADC delta-sigma.
@@ -330,7 +330,7 @@ Comprobado con capturas sintéticas (12 bits, 3,7 V, 1,7 V de amplitud): sin rui
 TI (págs. 11–13): es la medición de **ruido en DC** («input-short»): la entrada fija, el histograma de códigos es gaussiano, el ruido rms es una desviación estándar y el pico a pico es 6 o 6,6 σ. Con la entrada en 0 V **no entra** el ruido de la referencia (la razón `Vin/Vref` es cero, p.47); con la entrada en la mitad de la escala entra la mitad (Ec. 27 con %FS = 50 %).
 
 1. Dos puntos: **entrada en 0 V** (pin a GND, para el ruido propio del ADC) y **entrada en `Vref2 ≈ 1,85 V`** (código ≈ 2048, el punto de trabajo, que incluye la referencia).
-2. Capturar `M ≥ 4096` muestras (cifra propia; TI no fija un número). Con `ADC_N_PROMEDIO = 1` para ver el ADC solo, y con 5 para ver el resultado final.
+2. Capturar `M ≥ 4096` muestras (cifra propia; TI no fija un número). Sin promedio, cada muestra ya es el ADC solo (no hace falta recompilar).
 3. Contar las ocurrencias de cada código y calcular:
 
 | Métrica | Fórmula |
@@ -390,7 +390,7 @@ Misma trama de 9 bytes (`docs/especificacion_protocolo.md` §2). Tipos nuevos [V
 | `0xA1` | PIC → PC | `DATA_IQ` | I en `P0:P1`, Q en `P2:P3`, big-endian (12 bits en 16); `SEQ` propio 0–255 que **sube aunque la trama no quepa**, para que el PC vea el salto |
 
 - Al arrancar, el envío está **apagado**: el PC lo enciende con `ADC_STREAM`.
-- Ocupación de la línea (781 µs por trama): 200 tramas/s = **15,6 %** con `N = 5`; 1000 tramas/s = **78 %** con `N = 1`.
+- Ocupación de la línea (781 µs por trama): 1000 tramas/s = **78 %** (sin promedio, desde el 2026-11-03). Con el promedio de 5 de antes eran 200 tramas/s = 15,6 %.
 - Falta documentar estos tipos en `docs/especificacion_protocolo.md` (hecho en la sección 2 de ese archivo) y probarlos en el chip.
 
 ## 12. Decisiones y cambios que cita el código
@@ -399,7 +399,7 @@ El código cita `docs/instrucciones_claude_code_adc.md`, que **no estaba en la c
 
 | ID | Qué dice el código | Dónde |
 |---|---|---|
-| D-1 | `ADC_N_PROMEDIO = 5` | `adc_iq.h` |
+| D-1 | `ADC_N_PROMEDIO = 5`. **Retirada el 2026-11-03** por la persona: ya no hay promedio | (antes `adc_iq.h`) |
 | D-2 | tipos de trama `0x20`, `0xA0`, `0xA1` | `protocol.h` |
 | D-3 | no aparece en el código | – |
 | D-4 | pin de prueba RC2 durante la ISR | `adc_iq.h` |

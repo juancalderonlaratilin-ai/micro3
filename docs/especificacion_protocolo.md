@@ -68,7 +68,7 @@ Convención [PROPUESTA]: las peticiones del PC usan `TYPE < 0x80` y las respuest
 | `0xA0` | PIC → PC | ADC_ACK | `P0` = estado resultante (0 o 1), `P1–P3` = 0; copia el `SEQ` de la petición | – |
 | `0xA1` | PIC → PC | DATA_IQ | I en `P0:P1` y Q en `P2:P3`, big-endian (12 bits en 16); `SEQ` propio de 0 a 255 que sube **aunque la trama no quepa**, para que el PC vea el salto | – (sin pedirla) |
 
-Al arrancar el envío está apagado. Con 5 promedios salen 200 tramas/s (15,6 % de la línea). Detalle: `docs/especificacion_adc.md` §11.
+Al arrancar el envío está apagado. Sin promedio (desde el 2026-11-03) sale una trama por muestra: 1000 tramas/s (78,1 % de la línea). Detalle: `docs/especificacion_adc.md` §11.
 
 ## 3. El CRC-8
 

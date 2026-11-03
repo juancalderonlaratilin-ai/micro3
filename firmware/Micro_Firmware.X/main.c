@@ -85,8 +85,8 @@ void main(void)
 #elif MODO_ECO
     uint8_t b; // el byte que se acaba de leer de la UART
 #else
-    uint16_t i; // [T-09] promedio del canal I que entrega adc_iq_get (0 a 4095)
-    uint16_t q; // [T-09] promedio del canal Q
+    uint16_t i; // [T-09] muestra del canal I que entrega adc_iq_get (0 a 4095), sin promedio
+    uint16_t q; // [T-09] muestra del canal Q
 #endif
 
     // initialize the device
@@ -139,8 +139,9 @@ void main(void)
         protocol_task();
 
         // [T-09] adc_iq_get devuelve true solo si la ISR dejó listo un par nuevo (cada
-        // ADC_N_PROMEDIO ms). Se lee SIEMPRE, aunque el envío esté apagado, para que
-        // adcParesPerdidos solo cuente pérdidas reales. Si no hay par, regresa al instante.
+        // 1 ms: una sola muestra de I y Q, sin promedio). Se lee SIEMPRE, aunque el envío
+        // esté apagado, para que adcParesPerdidos solo cuente pérdidas reales.
+        // Si no hay par, regresa al instante.
         if (adc_iq_get(&i, &q))
         {
             // Solo se envía si el PC lo pidió con ADC_STREAM (al arrancar está apagado).

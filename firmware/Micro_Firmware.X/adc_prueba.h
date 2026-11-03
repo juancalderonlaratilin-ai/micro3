@@ -11,8 +11,8 @@
 #include <stdint.h>
 
 /* [PRUEBA ADC] Cada cuántos pares (I, Q) se manda una línea. El ADC muestrea a 1 kHz, así que
- * 50 pares = 50 ms = 20 líneas por segundo. Debe ser múltiplo de ADC_N_PROMEDIO (adc_iq.h),
- * porque los pares llegan en grupos de ese tamaño; adc_prueba.c lo revisa al compilar.
+ * 50 pares = 50 ms = 20 líneas por segundo. Va de 1 a 255 (el contador es de 8 bits);
+ * adc_prueba.c lo revisa al compilar.
  * Ojo: con 20 líneas/s el Serial Plotter solo dibuja bien señales de menos de 10 Hz (la mitad
  * de 20, teorema de muestreo); para una señal más rápida, bajar este número. */
 #define PRUEBA_PARES_POR_LINEA 50

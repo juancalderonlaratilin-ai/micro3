@@ -32,7 +32,7 @@ Proyecto Micro 3 · Firmware `firmware/Micro_Firmware.X` · Fecha: 2026-10-16 ·
 | Alimentación (VCC / VDD) | **3,7 V** DC de la fuente Keysight E36233A (GND a +3,7 V). Se asume que el PIC comparte esta alimentación. Las referencias Vref/Vref2 ≈ 1,85 V son la tierra virtual de las señales analógicas | confirmado (preinforme §1.2) |
 | Nivel lógico del conversor USB-serie | 3,3 V (CP2102, FT232R o similar) | ver nota 2.3 |
 | Visualización (gráfica de impedancia I vs Q) | **En el PC**, por UART, con LabVIEW o Python. El PIC no maneja pantalla | decidido (2026-10-16) |
-| ADC (Fase 2) | 12 bits (ADCC), `VREF = VDD = 3,7 V`, canales I = RC0 y Q = RC1 en un ADC multiplexado, **`fs` = 1 kHz** disparado por Timer0, I y Q convertidos en **menos de 1 ms**, promedio de 5 (200 pares/s). Detalle: `docs/especificacion_adc.md` | profesor y código de T-09; sin probar |
+| ADC (Fase 2) | 12 bits (ADCC), `VREF = VDD = 3,7 V`, canales I = RC0 y Q = RC1 en un ADC multiplexado, **`fs` = 1 kHz** disparado por Timer0, I y Q convertidos en **menos de 1 ms**, sin promedio (1000 pares/s, desde el 2026-11-03). Detalle: `docs/especificacion_adc.md` | profesor y código de T-09; sin probar |
 | **SINAD del ADC** | **> 60 dB** (ENOB > 9,67 bits), medido con una senoidal de 5 Hz y de 20 Hz casi a escala completa. Un 12 bits ideal da 74 dB, así que quedan 14 dB para ruido, jitter, referencia y distorsión (`docs/especificacion_adc.md` §6) | requisito de la persona (2026-10-30); condiciones de medición [PROPUESTA] |
 | Ruido de cuantización ideal del ADC | 261 µV rms con `VREF` = 3,7 V (el profesor cita 352 µV, que corresponde a 12 bits y 5 V) | por confirmar con el profesor |
 
@@ -62,7 +62,7 @@ Registros: `SP1BRGH = 0`, `SP1BRGL = 34`. La fórmula (`Fosc / [4 × (n + 1)]` c
    - **Conversor → PIC:** un conversor a 3,3 V entrega ~3,3 V. Con VDD = 3,7 V, la entrada Schmitt (por defecto) exige VIH ≥ 0,8 × VDD = **2,96 V**, un margen justo. Con entrada TTL basta VIH ≥ 0,25 × VDD + 0,8 = **1,73 V**. **Decisión: configurar RC5 como TTL (`INLVLC5 = 0`)** [VERIFICADO: DS Tabla 39-4 y registro `INLVLC`, p.217].
    - **No** uses un conversor con salida a 5 V: la entrada del PIC no debe superar VDD + 0,3 V.
 3. **Tierra común** entre el conversor USB-serie y la placa.
-4. **Por qué 115200 y no 9600** (de cara a la Fase 2): los filtros de I/Q son de 20 Hz, así que bastan ~100–200 muestras por segundo. Con tramas de 9 bytes eso son 900–1800 B/s (9–18 kbps de los 115,2 kbps). A 9600 baud el enlace se saturaría.
+4. **Por qué 115200 y no 9600** (de cara a la Fase 2): los filtros de I/Q son de 20 Hz, así que bastan ~100–200 muestras por segundo. Con tramas de 9 bytes eso son 900–1800 B/s (9–18 kbps de los 115,2 kbps). A 9600 baud el enlace se saturaría. Sin promedio (2026-11-03) se mandan 1000 tramas/s = 9000 B/s (78 % de la línea): 115200 es el baud estándar más bajo en que cabe.
 
 ---
 
@@ -104,7 +104,7 @@ Evitar los pines de programación (RA0 = ICSPDAT, RA1 = ICSPCLK, RA3 = MCLR) par
 Razones y consecuencias:
 
 - **Los trimmers I0/Q0 sustituidos por PWM** son los únicos elementos analógicos que el PIC controla. Según el preinforme, `V_out = Vref2 + 10·(I_LPF − I0)`, así que el PWM filtrado y con buffer ocupa el lugar del trimmer.
-- **La gráfica de impedancia no usa pines del PIC.** Los valores de I y Q viajan por la UART y el PC dibuja I (eje X) contra Q (eje Y). Cada muestra de 12 bits ocupa 2 bytes, de modo que I + Q = 4 bytes y caben en el campo de datos de la trama (§8.2). A 200 muestras/s son ~1800 B/s, el 15,6 % de la capacidad de la línea.
+- **La gráfica de impedancia no usa pines del PIC.** Los valores de I y Q viajan por la UART y el PC dibuja I (eje X) contra Q (eje Y). Cada muestra de 12 bits ocupa 2 bytes, de modo que I + Q = 4 bytes y caben en el campo de datos de la trama (§8.2). A 1000 muestras/s (sin promedio) son 9000 B/s, el 78,1 % de la capacidad de la línea.
 - **Una pantalla local no cabe** en este chip salvo un OLED I2C quitando el LED (0 de reserva). Una pantalla SPI necesitaría 4–5 pines. Si el profe la pide, el reemplazo sin cambios de código es el **PIC16F18446** (20 pines, 18 E/S, 17 canales de ADC; mismo datasheet [VERIFICADO: DS p.14]).
 - **Sin cristal externo:** usaría RA4 (OSC2) y RA5 (OSC1), que aquí son el PWM de Q0 y el LED.
 - **Debe respetarse RA0/RA1/RA3** para que el SNAP pueda programar y depurar.
@@ -159,7 +159,7 @@ Arquitectura guiada por eventos: las interrupciones solo capturan el evento y mu
 | T7 | `parser_task()` | bucle principal | Lee bytes de la FIFO de RX, busca el encabezado, verifica CRC y ejecuta el comando (E6/E7) |
 | T8 | `status_task()` | bucle principal | Maneja el LED y reporta banderas de error |
 | T9 | `adc_iq_isr()` | interrupción (E8) | Guarda I, arranca Q, guarda Q y suma el par al grupo de 5 (T-09) |
-| T10 | `adc_iq_get(&i, &q)` | llamada desde el programa principal | Entrega el último promedio si hay uno nuevo; no espera (T-09) |
+| T10 | `adc_iq_get(&i, &q)` | llamada desde el programa principal | Entrega el último par (una muestra de I y una de Q, sin promedio) si hay uno nuevo; no espera (T-09) |
 
 **Bucle principal:** `while(1) { parser_task(); status_task(); }`, sin esperas bloqueantes (prohibido `while(!TXIF)` y `__delay_ms` en la lógica).
 

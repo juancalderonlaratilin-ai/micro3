@@ -58,12 +58,12 @@ Requisitos técnicos ya vigentes del ADC (detalle en `docs/especificacion_adc.md
 
 | Pregunta | Respuesta | Etiqueta | Detalle |
 |---|---|---|---|
-| ¿Qué hace el PIC? | Muestrea I (RC0) y Q (RC1) cada 1 ms con el ADC, promedia 5 pares, arma una trama `DATA_IQ` de 9 bytes y la manda por la UART. Atiende `PING` y `ADC_STREAM` del PC | [VERIFICADO en el código] | §5 B5 a B9 |
+| ¿Qué hace el PIC? | Muestrea I (RC0) y Q (RC1) cada 1 ms con el ADC y, con cada par (sin promedio), arma una trama `DATA_IQ` de 9 bytes y la manda por la UART. Atiende `PING` y `ADC_STREAM` del PC | [VERIFICADO en el código] | §5 B5 a B9 |
 | ¿Qué hace el PC? | Abre el puerto a 115200 8N1, manda `ADC_STREAM`, lee las tramas, busca `A5 5A`, comprueba el CRC-8, detecta tramas perdidas con `SEQ`, convierte los códigos a voltios y dibuja (plano I–Q, histograma, espectro) | [PROPUESTA] (el VI de LabVIEW no está definido) | §5 B10, §8 |
 | Formato lógico | Trama **binaria** de 9 bytes: `A5 5A TYPE SEQ P0 P1 P2 P3 CRC8`, big-endian, CRC-8 de polinomio `0x07` sobre los bytes 2 a 7. **No es ASCII** | [VERIFICADO] | §7, `especificacion_protocolo.md` |
 | Formato físico | UART asíncrona **8N1** (8 datos, sin paridad, 1 parada), primero el bit menos significativo, TTL. PIC a 3,7 V; el TX baja a ≈ 2,54 V por un divisor de 1 kΩ + 2,2 kΩ para el módulo USB-serie de 3,3 V (CP2102); el RX del PIC es de nivel TTL. Tierra común | [VERIFICADO] / [CÁLCULO] (2,54 V) | §5 B8 |
 | Baud rate | **115200** pedido; el chip genera **114 286** (`SP1BRG` = 34), error **−0,79 %** | [CÁLCULO] | §5 B8 |
-| Velocidad de transmisión | Capacidad de la línea: 11 520 B/s. Uso: **1800 B/s** (200 tramas/s) = **15,6 %**. Con `ADC_N_PROMEDIO` = 1: 9000 B/s = 78,1 % | [CÁLCULO] | §3 |
+| Velocidad de transmisión | Capacidad de la línea: 11 520 B/s. Uso: **9000 B/s** (1000 tramas/s, sin promedio) = **78,1 %**; queda el 21,9 % libre | [CÁLCULO] | §3 |
 | ¿Cuántos bytes se transmiten? | 9 por trama; 4 son datos útiles (I y Q de 2 bytes cada uno) y 5 son de control. En el histograma de 10 000 muestras: 90 000 B | [CÁLCULO] | §7 |
 | ¿Qué formato de transmisión? | Binario. El ASCII queda solo para la prueba del Serial Plotter (`I:2048,Q:2051\r\n`, 15 B, 20 líneas/s) | [VERIFICADO] | §7.4 |
 | SINAD con 12 bits | Ideal **72 dB** (regla de 6,02 dB por bit = 72,2 dB); la fórmula completa con una senoidal a escala completa da **74,0 dB**. El **requisito** del proyecto es **> 60 dB** | [CÁLCULO] | §8.3 |
@@ -82,7 +82,7 @@ Requisitos técnicos ya vigentes del ADC (detalle en `docs/especificacion_adc.md
 | Ciclo de instrucción `TCY` | 250 ns | [CÁLCULO] | Fosc/4 |
 | Timer0 | 8 bits, reloj Fosc/4, prescaler 1:16, `TMR0H` = 249 → 250 cuentas × 4 µs = **1000 µs** | [CÁLCULO] | `tmr0.c`; DS p.261, p.267 |
 | Disparo del ADC | `ADACT = 0x02` = `TMR0_overflow` (Tabla 32-6, DS p.538); en modo de 8 bits es la **coincidencia** `TMR0L = TMR0H` | [VERIFICADO] | `especificacion_adc.md` §2.1 |
-| `fs` | 1 kHz; salida de datos a 200 Hz con el promedio de 5 | [VERIFICADO] | `adc_iq.h` |
+| `fs` | 1 kHz; salida de datos también a 1 kHz (sin promedio desde el 2026-11-03) | [VERIFICADO] | `adc_iq.c` |
 | Sobremuestreo respecto de 20 Hz | `fs/(2·20 Hz)` = 25 | [CÁLCULO] | |
 
 ### 3.2 ADC
@@ -123,7 +123,7 @@ Requisitos técnicos ya vigentes del ADC (detalle en `docs/especificacion_adc.md
 | Tiempo de bit / byte | 8,68 µs / 86,8 µs (nominal 115200); 8,75 µs / 87,5 µs (real) | [CÁLCULO] | |
 | Trama | 9 bytes = 90 bits = **781 µs** (787,5 µs con el baud real) | [CÁLCULO] | |
 | Capacidad | 11 520 B/s (1280 tramas/s como máximo) | [CÁLCULO] | |
-| Ocupación | 200 tramas/s: 1800 B/s, **15,6 %**; 1000 tramas/s: 9000 B/s, **78,1 %** | [CÁLCULO] | |
+| Ocupación | 1000 tramas/s (sin promedio): 9000 B/s, **78,1 %** | [CÁLCULO] | |
 | Buffers | RX 32 B; TX 64 B (7 tramas) | [VERIFICADO] | `especificacion_diseno_uart.md` §7 |
 | Memoria usada (compilación de T-04, antes del ADC) | 840 de 16 384 palabras de programa; 212 de 2048 B de datos | [VERIFICADO] | `docs/estado.md` |
 | **Jitter pedido** | **σ del periodo < 10 ns** | requisito de la persona | §8.2 |
@@ -146,7 +146,7 @@ flowchart LR
   end
   subgraph P["PIC16F18426 (Práctica 3)"]
     T0["Timer0<br/>1 kHz"] -->|"disparo"| ADC["ADC de 12 bits<br/>RC0 = I, RC1 = Q"]
-    ADC --> ISR["ISR del ADC<br/>promedio de 5"]
+    ADC --> ISR["ISR del ADC<br/>una muestra por canal"]
     ISR --> PR["Protocolo<br/>trama DATA_IQ de 9 B"]
     PR <--> UT["EUSART1<br/>TX = RC4, RX = RC5<br/>115200 8N1"]
     PWM["PWM6 y PWM7<br/>RA2 y RA4"]
@@ -159,7 +159,7 @@ flowchart LR
 
 *(Diagrama en Mermaid: lo dibuja GitHub y el visor de VS Code con extensión. Para el preinforme se redibuja como figura.)*
 
-Flujo de una muestra, en una línea: `señal de PCB2 → pin RC0/RC1 → S&H → ADC (SAR, 12 bits) → ADRES → ISR (suma) → promedio de 5 → trama DATA_IQ → cola de TX → UART → divisor → CP2102 → PC`.
+Flujo de una muestra, en una línea: `señal de PCB2 → pin RC0/RC1 → S&H → ADC (SAR, 12 bits) → ADRES → ISR (guarda I y Q) → trama DATA_IQ → cola de TX → UART → divisor → CP2102 → PC`.
 
 ---
 
@@ -226,10 +226,10 @@ TCOFF = 0,05 µs/°C · (T − 25 °C)        TAMP = 2 µs
 - **Estado:** implementado, sin probar.
 - **Detalle:** `docs/especificacion_adc.md` §2, §3, §10.
 
-### B6. ISR del ADC y promedio
+### B6. ISR del ADC
 
-- **Hace:** en cada fin de conversión (`ADIF` y `ADIE`) guarda el resultado, arranca la conversión siguiente y acumula. Cada 5 pares avisa al programa principal, que divide (`adc_iq_get`).
-- **Valores:** `ADC_N_PROMEDIO` = 5 (de 1 a 16: el acumulador de 16 bits admite 16 × 4095); `ADC_PIN_PRUEBA` = 1 sube RC2 durante cada ISR (dos pulsos por tick); contadores `adcParesPerdidos` y `adcTramasPerdidas`, que deben quedar en 0.
+- **Hace:** en cada fin de conversión (`ADIF` y `ADIE`) guarda el resultado y arranca la conversión siguiente. Al terminar Q deja el par listo para el programa principal (`adc_iq_get`), sin sumar ni dividir: una muestra por canal, 1000 pares/s (sin promedio desde el 2026-11-03).
+- **Valores:** `ADC_PIN_PRUEBA` = 1 sube RC2 durante cada ISR (dos pulsos por tick); contadores `adcParesPerdidos` y `adcTramasPerdidas`, que deben quedar en 0.
 - **Restricción:** una sola ISR para todo el chip (vector `0x0004`, sin prioridades ni anidamiento). La ISR del ADC espera si una de la UART está corriendo; la recepción tolera ≈ 174 µs de retraso antes de perder un byte (`especificacion_diseno_uart.md` §6).
 - **Duración de la ISR:** sin medir (prueba 4.13).
 - **Estado:** implementado, sin probar.
@@ -284,7 +284,7 @@ Para un residuo de ≤ 20 códigos bastan 10 bits; para ≤ 3 códigos hacen fal
 
 ### B11. Programa principal
 
-- **Hace:** `while(1) { protocol_task(); ...; si hay promedio nuevo y el envío está activo: protocol_send_iq(); }`, sin esperas bloqueantes (prohibido `while(!TXIF)` y `__delay_ms`).
+- **Hace:** `while(1) { protocol_task(); ...; si hay par nuevo y el envío está activo: protocol_send_iq(); }`, sin esperas bloqueantes (prohibido `while(!TXIF)` y `__delay_ms`).
 - **Cuidado:** el `main.c` copiado del zip trae `MODO_PRUEBA_ADC = 1` (solo texto para el Serial Plotter, sin protocolo). Para el preinforme y las pruebas con tramas hay que dejarlo en **0**. `MODO_ECO` (1 = eco crudo, 0 = protocolo) ya existía.
 - **Estado:** implementado, sin probar.
 
@@ -319,17 +319,16 @@ No está a escala; los tiempos exactos van en la tabla de abajo. La duración de
 
 [CÁLCULO] `t_ISR` es el tiempo de cada ISR del ADC, aún sin medir.
 
-### 6.2 Cinco ticks y una trama
+### 6.2 Un tick, una trama (sin promedio)
 
 ```
-tiempo (ms)         0         1         2         3         4         5
-Timer0 (coincide)   ^         ^         ^         ^         ^         ^
-rafaga I y Q        IQ        IQ        IQ        IQ        IQ        IQ
-promedio de 5       |<----- 5 pares ------>|
-main: trama                                                 [0,78 ms]
+tiempo (ms)         0         1         2         3
+Timer0 (coincide)   ^         ^         ^         ^
+rafaga I y Q        IQ        IQ        IQ        IQ
+main: trama          [0,78 ms] [0,78 ms] [0,78 ms]
 ```
 
-La quinta ráfaga termina hacia los 4,08 ms. `main` calcula el promedio y el CRC (bit a bit, ≈ 100 µs, estimado) y encola la trama de 781 µs. **Latencia desde la primera muestra hasta el último byte en la línea ≈ 5 ms** (4,08 + ≈ 0,1 + 0,78) [CÁLCULO], sin contar la latencia del USB-serie (sin medir). A 200 tramas/s la línea queda libre el 84,4 % del tiempo.
+La ráfaga de I y Q termina hacia los 0,08 ms (caso A de §6.1). `main` calcula el CRC (bit a bit, ≈ 100 µs, estimado) y encola la trama de 781 µs. **Latencia desde la muestra hasta el último byte en la línea ≈ 0,96 ms** (0,08 + ≈ 0,1 + 0,78) [CÁLCULO], sin contar la latencia del USB-serie (sin medir). A 1000 tramas/s la línea queda libre solo el 21,9 % del tiempo: cada trama termina ≈ 0,2 ms antes de que se encole la siguiente.
 
 ### 6.3 Un byte en la línea (0xA5 = 1010 0101, primero el bit menos significativo)
 
@@ -347,7 +346,7 @@ Cada bit dura 8,68 µs a 115200 (8,75 µs con 114 286). Un byte = 10 bits = 86,8
 |---|---|---|
 | F-1 | Diagrama de bloques (§4) | redibujar |
 | F-2 | Ráfaga I y Q dentro de 1 ms (§6.1), a escala, con los tres casos de `ADACQ` | este documento + prueba 4.16 con RC2 |
-| F-3 | Cadencia de 5 ticks y trama (§6.2) | este documento |
+| F-3 | Cadencia de un tick por trama (§6.2) | este documento |
 | F-4 | Un byte y una trama en la línea (§6.3) | este documento |
 | F-5 | Formato de la trama (§7.1) | este documento |
 | F-6 | Circuito de la UART con el divisor 1 kΩ + 2,2 kΩ | `docs/circuito_uart.svg` |
@@ -363,7 +362,7 @@ Cada bit dura 8,68 µs a 115200 (8,75 µs con 114 286). Un byte = 10 bits = 86,8
 | Paso | Qué pasa | Ejemplo con `I = 2048`, `Q = 2051`, `SEQ = 5` |
 |---|---|---|
 | 1 | El ADC deja 12 bits justificados a la derecha en `ADRESH:ADRESL` | `2048 = 0x0800`, `2051 = 0x0803` |
-| 2 | La ISR suma 5 pares; `main` divide entre 5 | promedio entero (12 bits) |
+| 2 | La ISR guarda el par tal cual (sin promedio) | `I = 2048`, `Q = 2051` |
 | 3 | Se arma el payload: `P0 = I>>8`, `P1 = I & 0xFF`, `P2 = Q>>8`, `P3 = Q & 0xFF` | `08 00 08 03` |
 | 4 | Se calcula el CRC-8 sobre `TYPE, SEQ, P0..P3` | `A1 05 08 00 08 03` → **`0x02`** |
 | 5 | Se encola con `tx_DAT` (todo o nada) | `A5 5A A1 05 08 00 08 03 02` |
@@ -391,7 +390,7 @@ Más vectores [CÁLCULO, con el CRC-8 verificado contra `"123456789"` = `0xF4` y
 
 Para pasar un código de 12 bits a texto decimal en un PIC de 8 bits se restan potencias de 10 (1000, 100, 10, 1) y se suma `0x30` a cada dígito. `2051` → `'2' '0' '5' '1'` = `32 30 35 31`.
 
-| Formato | Bytes | Tiempo en la línea | Ocupación a 200 / 1000 por s | Largo fijo | CRC y `SEQ` |
+| Formato | Bytes | Tiempo en la línea | Ocupación a 200 / 1000 por s (hoy se mandan 1000) | Largo fijo | CRC y `SEQ` |
 |---|---|---|---|---|---|
 | **Binario** `A5 5A … CRC8` | 9 | 781 µs | **15,6 % / 78,1 %** | sí | sí |
 | ASCII `2048,2051\n` | 10 | 868 µs | 17,4 % / 86,8 % | no (1 a 4 dígitos) | no |
@@ -415,7 +414,7 @@ Ninguna está hecha. Procedimientos completos en `docs/protocolos_prueba.md` (M�
 |---|---|
 | Entradas | 0 V (pin a GND, ruido propio del ADC) y `Vref2` ≈ 1,85 V (código ≈ 2048, incluye referencia y fuente) |
 | Captura | 10 000 tramas `DATA_IQ` → 90 000 B |
-| Duración | 10 s con `ADC_N_PROMEDIO` = 1 (1000 tramas/s, 78 % de la línea); 50 s con 5 (200 tramas/s) |
+| Duración | 10 s (1000 tramas/s, 78 % de la línea; sin promedio) |
 | Validez | si `adcTramasPerdidas` o el salto de `SEQ` suben, esa captura no vale |
 | Incertidumbre de la σ medida | 1/√(2·(M − 1)) = **0,71 %** con 10 000 muestras (1,10 % con 4096) [CÁLCULO] |
 | Resultados | σ (en códigos y en µV), códigos distintos, pico a pico ≈ 6 a 6,6 σ, resolución efectiva `log2(FSR/σ)` |
@@ -461,7 +460,7 @@ El histograma con la entrada en corto **no incluye** el ruido de la referencia; 
 | Margen sobre el ideal | 14 dB |
 | Con la señal real de PCB2 (±185 mV, el 10 % del rango) | un 12 bits ideal da 54 dB: **no alcanza 60 dB**. Se adoptó que el requisito es del ADC con una senoidal casi a escala completa [SIN VERIFICAR con el profesor] |
 
-Procedimiento: generador directo a RC0 y luego RC1 (≤ 10 kΩ, sin PCB2), senoidal centrada en 1,85 V con 1,7 V de amplitud, **5 Hz y 20 Hz**, 4096 pares (20,5 s a 200 tramas/s), ventana de Kaiser y el script de `docs/especificacion_adc.md` §6 (prueba 4.15). Aceptación: SINAD ≥ 60 dB en las dos frecuencias y los dos canales. Con capturas sintéticas el script dio 73,5 dB sin ruido y 59,1 dB con 1,45 LSB rms.
+Procedimiento: generador directo a RC0 y luego RC1 (≤ 10 kΩ, sin PCB2), senoidal centrada en 1,85 V con 1,7 V de amplitud, **5 Hz y 20 Hz**, 4096 pares (4,1 s a 1000 tramas/s), ventana de Kaiser y el script de `docs/especificacion_adc.md` §6 (prueba 4.15). Aceptación: SINAD ≥ 60 dB en las dos frecuencias y los dos canales. Con capturas sintéticas el script dio 73,5 dB sin ruido y 59,1 dB con 1,45 LSB rms.
 
 ### 8.4 «Modular los resultados del ADC y ver los 10 Hz» (RC-8) [SIN VERIFICAR]
 
@@ -496,7 +495,7 @@ Estados: **Cumple (calculado)**: el cálculo lo cumple, falta medir. **Cumple (m
 | 10 | Referencia con poco ruido | `VDD` ratiométrica con `Vref2`; falta medir el ruido de `VDD` (criterio ≤ 26 µV rms) | Por medir | 4.3, §8.1 |
 | 11 | Anti-aliasing: `fc ≤ fs/2` | Filtro de 19,4 Hz frente a 500 Hz; −56 dB a 500 Hz | Cumple (calculado) | – |
 | 12 | Enlace sin pérdidas | Eco a 115200: 20/20, 256/256, 1000/1000 | Cumple (medido, 2026-10-19) | 1.5 a 1.7 |
-| 13 | Capacidad de la línea | 15,6 % a 200 tramas/s; 78,1 % a 1000 | Cumple (calculado) | 4.14 |
+| 13 | Capacidad de la línea | 78,1 % a 1000 tramas/s (sin promedio); 21,9 % libre | Cumple, con poco margen (calculado) | 4.14 |
 | 14 | Error de baud | −0,79 %; peor caso combinado con el oscilador ≈ −2,8 % (al límite) | Cumple (medido en el eco) | 1.7, P2 |
 | 15 | Niveles lógicos | TX a 2,54 V (≥ 1,9 V); RX TTL con `VIH` 1,73 V frente a 3,3 V | Cumple (calculado) | 1.1 a 1.4 |
 | 16 | Auto-cero con precisión suficiente | PWM de 10 bits: ±20 códigos (±18 mV). El criterio original de ≤ 3 códigos **no es alcanzable** con 10 bits | **No cumple el criterio original**; CP-3 propone ≤ 20 | 5.3 |

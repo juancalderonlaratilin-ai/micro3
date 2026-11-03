@@ -4,7 +4,7 @@
  *      que esté en ADPCH (I). No hace falta software para el disparo: no hay jitter.
  *   2. Al terminar I, el ADC sube ADIF y entra adc_iq_isr(): guarda I, cambia a Q y arranca Q.
  *   3. Al terminar Q, entra otra vez adc_iq_isr(): guarda Q, deja ADPCH en I para el próximo
- *      tic y suma el par. Cada ADC_N_PROMEDIO pares deja las sumas listas para main.
+ *      tic y deja el par (una sola muestra de I y una de Q, sin promediar) listo para main.
  * Nombres de registros y bits verificados en pic16f18426.h (XC8 2.35). */
 
 #include <xc.h>                         /* nombres de los registros del PIC (ADPCH, ADRESH, ...) */
@@ -23,14 +23,11 @@ volatile uint16_t adcParesPerdidos = 0; /* declarado en adc_iq.h */
  * viven entre una interrupción y la siguiente). */
 static volatile AdcEstado adcEstado;  /* qué canal se está convirtiendo */
 static volatile uint16_t adcI;        /* último I leído, esperando a su Q */
-static volatile uint16_t sumaI;       /* suma de los I del grupo en curso */
-static volatile uint16_t sumaQ;       /* suma de los Q del grupo en curso */
-static volatile uint8_t  cuentaPares; /* cuántos pares lleva el grupo en curso */
 
 /* Variables compartidas con main: la ISR las escribe y adc_iq_get las lee con ADIE apagado. */
-static volatile uint16_t salidaI;     /* suma de I del último grupo completo */
-static volatile uint16_t salidaQ;     /* suma de Q del último grupo completo */
-static volatile bool     listo;       /* true = hay un grupo completo que main no ha leído */
+static volatile uint16_t salidaI;     /* I del último par completo (0 a 4095) */
+static volatile uint16_t salidaQ;     /* Q del último par completo (0 a 4095) */
+static volatile bool     listo;       /* true = hay un par completo que main no ha leído */
 
 void adc_iq_init(void)
 {
@@ -48,12 +45,9 @@ void adc_iq_init(void)
      *    para que la primera interrupción sea de verdad la del canal I. */
     PIR1bits.ADIF = 0;
 
-    /* Estado inicial: esperando I, grupo vacío, nada listo y contadores en cero. */
+    /* Estado inicial: esperando I, nada listo y contador en cero. */
     adcEstado = ESTADO_I;
     adcI = 0;
-    sumaI = 0;
-    sumaQ = 0;
-    cuentaPares = 0;
     salidaI = 0;
     salidaQ = 0;
     listo = false;
@@ -108,30 +102,17 @@ void adc_iq_isr(void)
         ADPCH = CANAL_I;
         adcEstado = ESTADO_I;
 
-        /* Se suma el par al grupo en curso. 16 × 4095 cabe en 16 bits (ver #error en adc_iq.h). */
-        sumaI += adcI;
-        sumaQ += resultado;
-        cuentaPares++;
-
-        if (cuentaPares >= ADC_N_PROMEDIO)
+        /* Par completo (sin promedio: una sola muestra de cada canal). Si main todavía no
+         * leyó el anterior, ese se pierde: se cuenta. */
+        if (listo)
         {
-            /* Grupo completo. Si main todavía no leyó el anterior, ese se pierde: se cuenta. */
-            if (listo)
-            {
-                adcParesPerdidos++;
-            }
-
-            /* Se pasan las sumas a la salida y se avisa a main. La división del promedio la
-             * hace main (adc_iq_get): en la ISR no se divide, para que sea corta. */
-            salidaI = sumaI;
-            salidaQ = sumaQ;
-            listo = true;
-
-            /* Se empieza un grupo nuevo. */
-            sumaI = 0;
-            sumaQ = 0;
-            cuentaPares = 0;
+            adcParesPerdidos++;
         }
+
+        /* Se pasa el par a la salida y se avisa a main. */
+        salidaI = adcI;
+        salidaQ = resultado;
+        listo = true;
     }
 
 #if ADC_PIN_PRUEBA
@@ -141,8 +122,8 @@ void adc_iq_isr(void)
 
 bool adc_iq_get(uint16_t *i, uint16_t *q)
 {
-    uint16_t si; /* copia de la suma de I */
-    uint16_t sq; /* copia de la suma de Q */
+    uint16_t si; /* copia de I */
+    uint16_t sq; /* copia de Q */
 
     /* Nada nuevo: se regresa enseguida, sin esperar. Leer un bool es una sola instrucción,
      * así que no hace falta apagar la interrupción para esto. */
@@ -151,7 +132,7 @@ bool adc_iq_get(uint16_t *i, uint16_t *q)
         return false;
     }
 
-    /* Las sumas son de 16 bits y el PIC las lee en dos pasos de 8. Si la ISR las cambiara entre
+    /* I y Q son de 16 bits y el PIC las lee en dos pasos de 8. Si la ISR las cambiara entre
      * los dos pasos, se leería medio valor viejo y medio nuevo. Por eso se apaga SOLO ADIE
      * (ADC Interrupt Enable, bit de PIE1) mientras se copian: GIE sigue encendido y la UART se
      * sigue atendiendo. Si el ADC termina justo ahora, ADIF queda arriba y la ISR corre apenas
@@ -162,10 +143,9 @@ bool adc_iq_get(uint16_t *i, uint16_t *q)
     listo = false;
     PIE1bits.ADIE = 1;
 
-    /* Promedio con redondeo al entero más cercano: (suma + N/2) / N. Se hace aquí, en main,
-     * porque la división es lenta en el PIC16 y no debe ir en la ISR. */
-    *i = (uint16_t)((si + (ADC_N_PROMEDIO / 2)) / ADC_N_PROMEDIO);
-    *q = (uint16_t)((sq + (ADC_N_PROMEDIO / 2)) / ADC_N_PROMEDIO);
+    /* Sin promedio: se entrega tal cual la única muestra de cada canal. */
+    *i = si;
+    *q = sq;
 
     return true;
 }

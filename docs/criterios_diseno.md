@@ -28,7 +28,7 @@ Proyecto Micro 3 · Enlace UART PC ↔ PIC (Fase 1) · Fecha: 2026-10-16 · Actu
 | 14 | Visualización I vs Q | En el PC (LabVIEW o Python), por UART | decidido |
 | 15 | Referencia del ADC (Fase 2) | VDD = 3,7 V (`ADREF = 0x00`) | en el código; falta confirmar con el profesor |
 | 16 | Muestreo del ADC | 1 kHz, disparado por Timer0 (hardware); I y Q convertidos en ráfaga dentro de 1 ms | profesor; código T-09 sin probar. Motivos en §11 |
-| 17 | Promedio del ADC | 5 pares (200 pares/s hacia el PC) | decisión D-1 del código [PROPUESTA] |
+| 17 | Promedio del ADC | **ninguno**: una muestra por par (1000 pares/s hacia el PC) | decisión de la persona (2026-11-03); reemplaza D-1 |
 | 18 | Canales del ADC | I = RC0 y Q = RC1, un solo ADC multiplexado | decidido |
 | 19 | **SINAD del ADC** | **> 60 dB** (ENOB > 9,67 bits) | requisito de la persona (2026-10-30) |
 
@@ -76,14 +76,14 @@ Proyecto Micro 3 · Enlace UART PC ↔ PIC (Fase 1) · Fecha: 2026-10-16 · Actu
 
 **Criterios para escoger 115200**
 
-| Baud | µs por byte | Bytes/s | Uso de la línea con 1800 B/s |
+| Baud | µs por byte | Bytes/s | Uso de la línea con 9000 B/s |
 |---|---|---|---|
-| 9600 | 1041,7 | 960 | **188 %: no cabe** |
-| 19200 | 520,8 | 1920 | 94 %: sin margen |
-| 57600 | 173,6 | 5760 | 31 % |
-| **115200** | **86,8** | **11 520** | **16 %** |
+| 9600 | 1041,7 | 960 | **938 %: no cabe** |
+| 19200 | 520,8 | 1920 | **469 %: no cabe** |
+| 57600 | 173,6 | 5760 | **156 %: no cabe** |
+| **115200** | **86,8** | **11 520** | **78 %** |
 
-- 1800 B/s = 200 muestras/s × 9 bytes por trama.
+- 9000 B/s = 1000 muestras/s × 9 bytes por trama (sin promedio desde el 2026-11-03; con el promedio de 5 eran 1800 B/s y 16 %). 115200 es el único baud estándar de la tabla en que cabe.
 - 115200 es un baud **estándar**: lo aceptan todas las terminales y adaptadores. Un valor raro (como los 125 000 que da el código MCC de clase) solo lo aceptan algunos.
 - A 115200 la ISR tiene 86,8 µs (≈347 ciclos) por byte. Sobra para una ISR corta.
 - **Plazo de RX:** el receptor tiene solo 2 bytes de FIFO. Si llega completo un tercer byte sin que se haya leído `RC1REG` hay overrun. A 115200 son unos 174 µs.
@@ -114,7 +114,7 @@ reposo ‾‾‾|START|D0|D1|D2|D3|D4|D5|D6|D7|STOP|‾‾‾ reposo
 | Formato | `A5 5A`, `TYPE`, `SEQ`, `PAYLOAD` (4 bytes), `CRC8` | Dos bytes de cabecera para resincronizar. `SEQ` permite detectar pérdidas |
 | Datos I y Q | 2 bytes por canal, 12 bits cada uno | I + Q = 4 bytes = el campo `PAYLOAD` |
 | Verificación | CRC-8 (polinomio `0x07`) sobre los bytes 2 a 7 | Detecta errores y corrupción de bytes |
-| Duración de una trama | 9 × 86,8 µs = 781 µs | Con 200 muestras/s: 15,6 % de la línea |
+| Duración de una trama | 9 × 86,8 µs = 781 µs | Con 1000 muestras/s (sin promedio): 78,1 % de la línea |
 | Etapas | 1a: eco crudo. 1b: ping/pong con CRC | Se prueba primero el canal físico y luego la lógica |
 
 **Alternativas que quedan abiertas:** XOR en lugar de CRC-8 (más simple, detecta menos), y la lista final de tipos de trama.
@@ -158,9 +158,9 @@ reposo ‾‾‾|START|D0|D1|D2|D3|D4|D5|D6|D7|STOP|‾‾‾ reposo
 - Aquí el buffer es el segundo escalón: el hardware solo tiene una FIFO de 2 bytes, y la ISR debe vaciarla en menos de unos 174 µs (ver la especificación).
 
 **Por qué 64 en TX**
-- El PIC es el que más habla. En la Fase 2 serán 9 bytes por muestra, a unas 200 muestras por segundo (1800 B/s, el 16 % de la línea; es una propuesta de velocidad de muestreo, no un dato confirmado). Entre muestras pasan 5 ms y una trama tarda 0,78 ms en salir.
+- El PIC es el que más habla. En la Fase 2 son 9 bytes por muestra, a 1000 muestras por segundo (9000 B/s, el 78 % de la línea; sin promedio desde el 2026-11-03). Entre muestras pasa 1 ms y una trama tarda 0,78 ms en salir.
 - Una respuesta (por ejemplo PONG) puede coincidir con tramas de datos. 63 bytes útiles son 7 tramas completas: aguanta ráfagas de varias tramas encoladas de golpe sin devolver `false`.
-- Vaciar el buffer completo toma 5,5 ms, casi un periodo de muestreo: aunque se llene, los datos no quedan atrasados más de eso.
+- Vaciar el buffer completo toma 5,5 ms de línea. Pero como siguen entrando 9 B por milisegundo y salen 11,5, solo se descuentan ≈ 2,5 B/ms: si una ráfaga lo llena, tarda ≈ 25 ms en volver a vaciarse [CÁLCULO]. Mientras tanto una respuesta (PONG, ADC_ACK) puede no caber.
 
 **Por qué potencia de 2**
 - El índice se envuelve con `idx = (idx + 1) & (N - 1)`: una operación. Con un tamaño cualquiera habría que usar `%`, que en un PIC16 sin divisor por hardware lo resuelve una rutina de software más lenta, y esto corre dentro de la ISR.
@@ -271,6 +271,7 @@ Fuente de los niveles del CP2102: datasheet del CP2102-GMR (Silicon Labs), secci
 | 2026-10-21 | El cálculo del filtro RC del PWM (valores de R y C) se **aplaza** | Decisión de la persona; T-06 no lo necesita para empezar |
 | 2026-10-30 | **SINAD del ADC > 60 dB** como requisito de diseño | Decisión de la persona. Condiciones de medición en `docs/especificacion_adc.md` §6 [PROPUESTA] |
 | 2026-10-30 | Se documenta el ADC de T-09: muestreo de 1 kHz por Timer0, promedio de 5 y tipos de trama `0x20`, `0xA0`, `0xA1` | El código ya existía (zip del 2026-10-30); se documentó lo que hace. No hubo cambio de diseño |
+| 2026-11-03 | **Se quita el promedio del ADC** (antes 5 pares, D-1): cada trama `DATA_IQ` lleva una sola muestra de I y de Q; 1000 tramas/s = 78,1 % de la línea | Decisión de la persona. Se pierde la mejora de ruido del promedio (hasta 7 dB) y queda poco margen en la UART (§6.1) |
 
 
 ---
@@ -286,7 +287,7 @@ Fuente de los niveles del CP2102: datasheet del CP2102-GMR (Silicon Labs), secci
 | Disparo | Timer0 por hardware (`ADACT`) | El instante de muestreo de I no depende del software (el jitter que importa es el del reloj de muestreo, no el de conversión). Sin esperas | `__delay_ms` o iniciar por software: prohibido y con jitter |
 | I y Q | un ADC multiplexado, en ráfaga | Un solo convertidor. Sesgo entre canales de 0,5 % a 20 Hz si la adquisición es de 10 µs, 4,4 % si es de 320 µs [CÁLCULO] | Alternar canales a 2 kHz (sesgo de 500 µs, 6 %); ADC de muestreo simultáneo (innecesario) |
 | Jitter de Q | por vigilar | Q lo arranca la ISR, así que hereda la variación de latencia de las ISR de la UART (hasta 25 µs ⇒ 61 dB a 20 Hz) [CÁLCULO] | Disparar Q por hardware (a decidir si la prueba 4.17 falla) |
-| Promedio | 5 pares | Baja el ruido hasta 7 dB si el ruido es blanco y ≥ 0,5 LSB. Atenúa solo 0,14 dB a 20 Hz [CÁLCULO]. 200 tramas/s = 15,6 % de la línea | `N = 1`: 1000 tramas/s = 78 % de la línea (solo para el histograma) |
+| Promedio | ninguno (una muestra por par) | Decisión de la persona (2026-11-03). Cada trama trae la conversión cruda: sirve tal cual para el histograma y el SINAD del ADC. 1000 tramas/s = 78,1 % de la línea | 5 pares (lo de antes, D-1): bajaba el ruido hasta 7 dB si era blanco y ≥ 0,5 LSB, atenuaba 0,14 dB a 20 Hz y ocupaba 15,6 % de la línea |
 | ISR del ADC | llamada directa desde `interrupt_manager.c` (C-11) | Mismo criterio que C-06: no se cambia la función en ejecución, y se ahorra el salto indirecto | Puntero `ADCC_ADI_InterruptHandler` de MCC |
 | SINAD | > 60 dB | Requisito de la persona. Un 12 bits ideal da 74 dB a escala completa: 14 dB de margen para ruido, jitter, referencia y distorsión | – |
 | Disparo del ADC | `ADACT` = `00010` (`TMR0_overflow`) | Periodo exacto por hardware (`TMR0H` = 249 → 1000 µs), sin recargar por software. El Timer2 es del PWM. `ADACT` solo elige una fuente, así que Q lo arranca la ISR | Timer1/3/5 (16 bits: recarga por software), PWM6/7 (15,6 kHz), pin externo, escribir `ADPCH` o leer `ADRESH` (software, con jitter). Timer4 y Timer6 también servirían (`docs/especificacion_adc.md` §2.1) |
