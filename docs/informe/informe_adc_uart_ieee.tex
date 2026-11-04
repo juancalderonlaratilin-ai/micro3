@@ -1,0 +1,226 @@
+% Compilar con XeLaTeX o LuaLaTeX (en Overleaf: Menu -> Compiler -> XeLaTeX)
+\documentclass[11pt,letterpaper]{article}
+
+% ---------------------------------------------------------------- página y fuente
+\usepackage[margin=0.85in]{geometry}
+\usepackage{fontspec}
+\setmainfont{TeX Gyre Termes}          % tipo Times, como IEEE
+\usepackage{amsmath,amssymb}
+\usepackage{microtype}
+\usepackage{booktabs,tabularx,array,float}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{caption}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage[output-decimal-marker={,},group-separator={\,},group-minimum-digits=4,
+            per-mode=symbol]{siunitx}
+
+% ---------------------------------------------------------------- textos en español
+\renewcommand{\tablename}{Tabla}
+\renewcommand{\refname}{Referencias}
+\renewcommand{\abstractname}{Resumen}
+
+% ---------------------------------------------------------------- estilo IEEE
+\renewcommand{\thesection}{\Roman{section}}
+\renewcommand{\thesubsection}{\Alph{subsection}}
+\titleformat{\section}{\centering\scshape\large}{\thesection.}{0.5em}{}
+\titleformat{\subsection}{\itshape}{\thesubsection.}{0.5em}{}
+\titlespacing*{\section}{0pt}{1.3em}{0.6em}
+\titlespacing*{\subsection}{0pt}{1.1em}{0.5em}
+
+\renewcommand{\thetable}{\Roman{table}}
+\captionsetup[table]{labelfont=sc, textfont=sc, labelsep=newline,
+                     justification=centering, skip=6pt, font=small}
+
+\setlength{\parindent}{1.2em}
+\setlength{\parskip}{0.3em}
+\renewcommand{\arraystretch}{1.2}
+\setlength{\tabcolsep}{6pt}
+\newcolumntype{Y}{>{\raggedright\arraybackslash}X}
+\setlist{itemsep=0pt, topsep=3pt}
+
+\definecolor{elegido}{RGB}{0,82,147}
+\newcommand{\elegido}[1]{\textcolor{elegido}{#1}}   % resalta la opción elegida
+
+\begin{document}
+
+% ================================================================ título
+\begin{center}
+  {\LARGE Configuración del ADC y la UART del PIC16F18426\\[0.25em]
+  en el instrumento de corrientes de Eddy}\\[0.9em]
+  {\large Proyecto Micro 3 --- Microcontroladores}\\[0.3em]
+  {\small Resumen de decisiones de diseño}
+\end{center}
+
+\vspace{0.6em}
+\begin{abstract}
+\noindent
+El PIC16F18426 digitaliza las componentes en fase ($I$) y en cuadratura ($Q$) que entrega la placa de demodulación y las envía a un PC por UART. Este documento reúne, en un solo lugar, \emph{qué} se escogió para el ADC y la UART y \emph{por qué}, con los cálculos mínimos de cada valor. También compara el formato ASCII con la trama binaria de 9 bytes que se usa. Resultado: muestreo de $I$ y $Q$ a \SI{1}{\kilo\hertz} disparado por hardware, enlace a \num{115200} baudios 8N1 y tramas binarias con CRC-8 que ocupan el \SI{78}{\percent} de la línea, frente al \SI{130}{\percent} que exigiría el ASCII.
+\end{abstract}
+
+% ================================================================ I
+\section{Datos del sistema}
+
+\noindent
+PIC16F18426 (14 pines, 8 bits) con oscilador interno HFINTOSC a $F_\text{osc} = \SI{16}{\mega\hertz}$ (\SI{+-2}{\percent}), así que $T_\text{CY} = 4/F_\text{osc} = \SI{250}{\nano\second}$. Alimentación $V_{DD} = \SI{3.7}{\volt}$, accesible en J1, en TP3 y en el pin 2 de J4. Las señales $I$ (RC0) y $Q$ (RC1) llegan centradas en $V_\text{ref2} = \SI{1.85}{\volt}$, con banda de $\lesssim \SI{20}{\hertz}$. El enlace al PC es EUSART1 $\rightarrow$ traductores SN74LVC1T45 $\rightarrow$ CP2102 (USB) $\rightarrow$ LabVIEW o Python.
+
+% ================================================================ II
+\section{UART: qué se escogió y por qué}
+
+La Tabla~\ref{tab:uart} resume cada decisión; abajo están los cálculos.
+
+\begin{table}[!htb]
+\caption{Decisiones de la UART}\label{tab:uart}
+\centering
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}p{0.27\textwidth}Y@{}}
+\toprule
+\textbf{Parámetro} & \textbf{Elegido} & \textbf{Por qué} \\
+\midrule
+Modo & EUSART1 asíncrono, \textbf{8N1} & Estándar: lo acepta cualquier terminal, LabVIEW o Python sin configuración especial. \\
+Velocidad & \textbf{\num{115200} baud} (\num{114286} reales) & Es el baud estándar más bajo donde caben \num{1000} tramas/s: ocupa el \SI{78}{\percent}. A \num{9600}, \num{19200} y \num{57600} baud serían el \SI{938}{\percent}, el \SI{469}{\percent} y el \SI{156}{\percent}. \\
+Generador de baud & \texttt{BRGH}\,=\,1, \texttt{BRG16}\,=\,1, \texttt{SP1BRG}\,=\,34 & Error de \SI{-0.79}{\percent}; con el generador de 8 bits sería \SI{-3.55}{\percent}. \\
+Pines & TX = RC4, RX = RC5 (PPS) & No chocan con el ADC (RC0, RC1) ni con el programador (RA0, RA1, RA3). \\
+Nivel de RX & TTL (\texttt{INLVLC5}\,=\,0) & $V_{IH} = \SI{1.73}{\volt}$: \SI{1.57}{\volt} de margen con \SI{3.3}{\volt}. Con Schmitt serían \SI{2.96}{\volt}. \\
+Capa física & 2 $\times$ SN74LVC1T45 & El CP2102 admite como máximo $V_{IO} + \SI{0.5}{\volt} = \SI{3.8}{\volt}$; el PIC saca \SI{3.7}{\volt}. \\
+Atención & Interrupciones de RX y TX & Nada espera: prohibidos \texttt{while(!TX1IF)} y \texttt{\_\_delay\_ms}. \\
+Buffers & Circulares: RX \num{32} B, TX \num{64} B & Potencias de 2: el índice avanza con \texttt{(i+1)\,\&\,(N-1)}, sin división. TX guarda 7 tramas. \\
+Envío & \texttt{tx\_DAT()}, \texttt{tx\_string()} & Todo o nada: nunca sale media trama; si no cabe, devuelven \texttt{false} sin esperar. \\
+Formato & \textbf{Trama binaria de 9 B con CRC-8} & Ver la sección~\ref{sec:formato}. \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Cálculo del baud}
+Con \texttt{BRGH}\,=\,1 y \texttt{BRG16}\,=\,1:
+\begin{gather}
+  \text{Baud} = \frac{F_\text{osc}}{4\,(\text{SP1BRG}+1)} = \frac{\SI{16}{\mega\hertz}}{4\,(34+1)} = \num{114286}\ \text{baud} \\[2pt]
+  \text{error} = \frac{\num{114286} - \num{115200}}{\num{115200}} = \SI{-0.79}{\percent}
+\end{gather}
+La fórmula de 8 bits, $\text{Baud} = F_\text{osc}/[16(\text{SP1BRG}+1)]$, da $\text{SP1BRG} = 7{,}68 \rightarrow 8$ y \num{111111} baud (\SI{-3.55}{\percent}), demasiado lejos si se suma el \SI{+-2}{\percent} del oscilador.
+
+\textbf{Tolerancia.} El receptor muestrea el bit de parada a 9,5 bits del flanco de inicio, así que el desfase total debe ser menor que $0{,}5/9{,}5 = \SI{+-5.3}{\percent}$ (en la práctica, entre \SI{2}{\percent} y \SI{3}{\percent}). Peor caso: $\SI{-0.79}{\percent} - \SI{2}{\percent} \approx \SI{-2.8}{\percent}$: funciona.
+
+\textbf{Tiempos.} $T_\text{bit} = \SI{8.75}{\micro\second}$, byte 8N1 (10 bits) $= \SI{87.5}{\micro\second}$, capacidad $\approx \SI{11520}{\byte\per\second}$. La FIFO de RX del chip guarda 2 bytes: la interrupción debe leerla antes de $\approx \SI{174}{\micro\second}$.
+
+\textbf{Verificado:} eco a \num{115200} baud con 20/20, 256/256 y 1000/1000 bytes sin errores (2026-10-19).
+
+
+
+% ================================================================ III
+\section{ADC: qué se escogió y por qué}
+
+La Tabla~\ref{tab:adc} resume cada decisión; abajo están los cálculos.
+
+\begin{table}[!htb]
+\caption{Decisiones del ADC}\label{tab:adc}
+\centering
+\begin{tabularx}{\textwidth}{@{}l>{\raggedright\arraybackslash}p{0.27\textwidth}Y@{}}
+\toprule
+\textbf{Parámetro} & \textbf{Elegido} & \textbf{Por qué} \\
+\midrule
+Convertidor & ADCC de 12 bits, modo básico, resultado a la derecha & 4096 niveles; 1 LSB $= \SI{0.903}{\milli\volt}$. \\
+Referencia & $V_\text{ref+} = V_{DD} = \SI{3.7}{\volt}$ (\texttt{ADREF}\,=\,0x00) & Cubre 0 a \SI{3.7}{\volt} sin recorte y es ratiométrica: $V_\text{ref2}$ sale de un divisor del mismo riel, así que el reposo queda en 2048 aunque $V_{DD}$ varíe. FVR de \SI{2.048}{\volt}: recorta; FVR de \SI{4.096}{\volt}: no puede superar $V_{DD}$. \\
+Canales & $I$ = RC0 (0x10), $Q$ = RC1 (0x11) & Un solo ADC multiplexado: $I$ y luego $Q$ en ráfaga. \\
+Muestreo & $f_s = \SI{1}{\kilo\hertz}$ & Pedido por el profesor. Con señal $\lesssim \SI{20}{\hertz}$: sobremuestreo de 25; Nyquist en \SI{500}{\hertz}. \\
+Disparo & Timer0 por hardware (\texttt{ADACT}\,=\,0x02) & El instante de $I$ no depende del software (sin jitter de código). El Timer2 queda para el PWM. \\
+Timer0 & $F_\text{osc}/4$, prescaler 1:16, \texttt{TMR0H}\,=\,249 & Periodo exacto de \SI{1000}{\micro\second} sin recargar por software. \\
+Reloj del ADC & $T_{AD} = \SI{2}{\micro\second}$ (\texttt{ADCLK} $= F_\text{osc}/32$) & Dentro del rango permitido (0,5 a \SI{9}{\micro\second}); conversión de \SI{28.5}{\micro\second}. \\
+Adquisición & \texttt{ADACQ}\,=\,160 & El datasheet es ambiguo: 10, 40 o \SI{320}{\micro\second}. Los tres casos caben en 1 ms; se mide con el pin marcador. \\
+Promedio & Ninguno & Cada trama lleva una sola muestra de $I$ y una de $Q$ (1000 pares/s). \\
+Entrada al pin & \SI{1}{\kilo\ohm} en serie + \SI{10}{\nano\farad} a GND & Aísla al operacional MCP604 de la carga del S\&H y sirve de depósito de carga. Pide $T_\text{ACQ} \gtrsim \SI{40}{\micro\second}$ (ver abajo). \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\subsection{Cálculos}
+\begin{gather}
+  1\ \text{LSB} = \frac{V_{DD}}{4096} = \SI{0.9033}{\milli\volt}, \qquad
+  N(\SI{1.85}{\volt}) = \frac{1{,}85}{3{,}7}\times 4096 = 2048\ (\texttt{0x800}) \\[2pt]
+  T_s = (\texttt{TMR0H} + 1)\cdot \frac{16}{F_\text{osc}/4} = 250 \times \SI{4}{\micro\second} = \SI{1000}{\micro\second} \\[2pt]
+  T_\text{conv} = 14\,T_{AD} + 2\,T_\text{CY} = 14(\SI{2}{\micro\second}) + 2(\SI{0.25}{\micro\second}) = \SI{28.5}{\micro\second}
+\end{gather}
+
+\textbf{Calidad.} El ideal de 12 bits es $\text{SINAD} = 6{,}02\cdot 12 + 1{,}76 = \SI{74}{\decibel}$. El requisito de \SI{60}{\decibel} equivale a $\text{ENOB} = (60-1{,}76)/6{,}02 = 9{,}67$ bits: con una senoidal a escala completa (\SI{1.31}{\volt} rms) se permiten \SI{1.31}{\milli\volt} rms de ruido y distorsión, unos 1,45 LSB. El ruido de cuantización es $\text{LSB}/\sqrt{12} = \SI{0.261}{\milli\volt}$ rms.
+
+\textbf{Sesgo entre $I$ y $Q$.} La muestra de $Q$ se toma $\approx \SI{46}{\micro\second}$ después de la de $I$ (con \SI{10}{\micro\second} de adquisición). A \SI{20}{\hertz} eso es $360^\circ \cdot 20 \cdot \SI{46}{\micro\second} = 0{,}33^\circ$ de error de fase: despreciable.
+
+\textbf{Red de \SI{1}{\kilo\ohm} + \SI{10}{\nano\farad}.} Al conectarse el capacitor interno ($C_\text{HOLD} = \SI{28}{\pico\farad}$), el pin salta solo $28/10\,028 = \SI{0.28}{\percent}$ de la diferencia con el canal anterior. Luego se recupera con $\tau = \SI{1}{\kilo\ohm}\cdot\SI{10}{\nano\farad} = \SI{10}{\micro\second}$. La mezcla de $I$ en $Q$ queda en \SI{-60}{\decibel} con \SI{10}{\micro\second} de adquisición y en \SI{-86}{\decibel} con \SI{40}{\micro\second}; por eso no conviene acortarla por debajo de unos \SI{40}{\micro\second}.
+
+% ================================================================ IV
+\section{Formato de los datos: ASCII frente a binario de 9 bytes}
+\label{sec:formato}
+
+\subsection{La trama binaria que se transmite}
+
+\begin{table}[!htb]
+\caption{Trama de 9 bytes (\emph{big-endian}). Ejemplo: $I = 2048$, $Q = 2051$, SEQ = 5}
+\centering
+\begin{tabular}{@{}lccccccccc@{}}
+\toprule
+\textbf{Byte} & 0 & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8 \\
+\textbf{Campo} & sync & sync & TYPE & SEQ & $I_\text{alto}$ & $I_\text{bajo}$ & $Q_\text{alto}$ & $Q_\text{bajo}$ & CRC-8 \\
+\textbf{Ejemplo} & \texttt{A5} & \texttt{5A} & \texttt{A1} & \texttt{05} & \texttt{08} & \texttt{00} & \texttt{08} & \texttt{03} & \texttt{02} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent
+TYPE \texttt{A1} = datos. SEQ sube en cada trama: un salto indica una trama perdida. El CRC-8 (polinomio \texttt{0x07}, valor inicial 0) se calcula sobre los bytes 2 a 7; si no coincide, el receptor descarta la trama.
+
+\subsection{Comparación}
+
+La Tabla~\ref{tab:comp} compara la trama binaria con dos formatos de texto posibles.
+
+\begin{table}[!htb]
+\caption{ASCII frente a binario a \SI{1}{\kilo\hertz} y \num{115200} baud}\label{tab:comp}
+\centering
+\begin{tabularx}{\textwidth}{@{}lYYY@{}}
+\toprule
+ & \textbf{\elegido{Binario (elegido)}} & \textbf{ASCII etiquetado} & \textbf{ASCII mínimo} \\
+ & \texttt{A5 5A A1 SEQ I Q CRC} & \texttt{I:2048,Q:2051\textbackslash r\textbackslash n} & \texttt{2048,2051\textbackslash n} \\
+\midrule
+Bytes por muestra & \textbf{9, fijo} & 9 a 15, variable & 4 a 10, variable \\
+Tiempo en la línea & \textbf{\SI{787.5}{\micro\second}} & \SI{1312.5}{\micro\second} ($> T_s$) & \SI{875}{\micro\second} \\
+Ocupación a 1000/s & \textbf{\SI{78}{\percent}} & \SI{130}{\percent}: \textbf{no cabe} & \SI{87}{\percent}: sin margen \\
+Máximo sostenible & \textbf{1280 /s} & 768 /s & 1152 /s \\
+CPU por muestra (estimado) & \textbf{$\approx$\SI{215}{\micro\second}} (casi todo es el CRC) & $\approx$\SI{305}{\micro\second} (pasar a decimal) & $\approx$\SI{290}{\micro\second} \\
+Integridad & \textbf{CRC-8} & ninguna & ninguna \\
+Pérdidas & \textbf{SEQ} & no se detectan & no se detectan \\
+Sincronía & \textbf{\texttt{A5 5A}} + largo fijo & fin de línea & fin de línea \\
+Legible en terminal & no & \textbf{sí} (Serial Plotter) & \textbf{sí} \\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+
+\subsection{Ventajas y desventajas}
+
+\noindent\textbf{Binario de 9 bytes.}
+\begin{itemize}
+  \item[+] Cabe a 1000 muestras/s con margen, y siempre tarda lo mismo (largo fijo).
+  \item[+] Detecta tramas dañadas (CRC-8) y perdidas (SEQ), y se resincroniza solo con \texttt{A5 5A}.
+  \item[+] Pasar un valor de 12 bits a la trama es solo partirlo en dos bytes ($\approx\SI{2.5}{\micro\second}$).
+  \item[$-$] No se lee en una terminal: el PC necesita un decodificador (buscar \texttt{A5 5A}, revisar el CRC y unir los bytes).
+  \item[$-$] En LabVIEW hay que desactivar el carácter de terminación, porque un dato puede valer \texttt{0x0A}.
+\end{itemize}
+
+\noindent\textbf{ASCII.}
+\begin{itemize}
+  \item[+] Se ve directo en el Serial Plotter o en una terminal, y el fin de línea sincroniza solo.
+  \item[$-$] El formato del Serial Plotter no cabe a 1000 muestras/s: la línea dura más que el periodo de muestreo.
+  \item[$-$] Largo variable, sin verificación de errores ni detección de pérdidas (agregarlas alarga aún más la línea).
+  \item[$-$] Convertir a decimal en un PIC sin divisor cuesta $\approx\SI{95}{\micro\second}$ por valor, unas 38 veces más que partir en bytes.
+\end{itemize}
+
+\subsection{Decisión}
+Se usa la \textbf{trama binaria de 9 bytes} para los datos (lo pidió el profesor: el ASCII es pesado para el procesador). El ASCII queda solo como prueba visual (\texttt{MODO\_PRUEBA\_ADC}\,=\,1), mandando 1 línea cada 50 muestras: 20 líneas/s, el \SI{2.6}{\percent} de la línea.
+
+% ================================================================ referencias
+\begin{thebibliography}{9}\small\setlength{\itemsep}{0pt}
+\bibitem{ds} Microchip Technology, \emph{PIC16(L)F18426/46 Data Sheet}, DS40001985C (ADCC, EUSART, Timer0, parámetros AD20 y AD22).
+\bibitem{lvc} Texas Instruments, \emph{SN74LVC1T45 Single-Bit Dual-Supply Bus Transceiver}, SCES515.
+\bibitem{cp} Silicon Labs, \emph{CP2102 Single-Chip USB to UART Bridge}.
+\end{thebibliography}
+
+\end{document}
