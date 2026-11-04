@@ -12,12 +12,23 @@
 
 /* [T-09] Sin promedio (cambio del 2026-11-03, reemplaza la decisión D-1 de promediar 5):
  * cada par que entrega adc_iq_get es UNA sola conversión de I y UNA de Q. Con muestreo a
- * 1 kHz salen 1000 pares por segundo (1000 tramas DATA_IQ/s, ~78 % de la línea a 115200). */
+ * 1 kHz salen 1000 pares por segundo (adc_ascii.c manda 1 de cada ADC_PARES_POR_LINEA). */
 
-/* [T-09] Pin de prueba (decisión D-4): 1 = RC2 sube mientras corre adc_iq_isr(), para medir
- * con el osciloscopio el período de muestreo y la duración de la ISR (pruebas 4.5 y 4.13).
- * 0 = RC2 no se toca. */
-#define ADC_PIN_PRUEBA 1
+/* [T-09] Pin de prueba RC2 (pata 8, el pin libre; decisión D-4). Qué sale por RC2:
+ *   0 = nada: RC2 no se toca.
+ *   1 = pulso de la ISR: RC2 sube mientras corre adc_iq_isr() (dos pulsos por ms: fin de I y
+ *       fin de Q). Sirve para medir la duración de la ISR (pruebas 4.5 y 4.13).
+ *   2 = salida del Timer0 (TMR0_out, por PPS): onda cuadrada de 500 Hz. TMR0_out cambia de
+ *       nivel cada vez que el Timer0 llega a su período (1 ms), así que CADA FLANCO (de subida
+ *       y de bajada) es un disparo del ADC. Es la señal del hardware, sin software en medio:
+ *       sirve para medir el período de muestreo y su jitter (prueba 4.5).
+ * Ojo, en la PCB nueva RC2 es EN_AZ_PIC: deja JP_AZEN en 1-2 (reposo) y mide en la pata 3 de
+ * JP_AZEN (o en la pata 8 del PIC). Con JP_AZEN en 2-3 esta señal conmutaría U4. */
+#define ADC_PIN_PRUEBA 2
+
+#if (ADC_PIN_PRUEBA < 0) || (ADC_PIN_PRUEBA > 2)
+#error "ADC_PIN_PRUEBA debe ser 0, 1 o 2"
+#endif
 
 /* [T-09] Pares que se perdieron porque main no alcanzó a leer el anterior antes de que la ISR
  * tuviera listo el siguiente. Es "volatile" (lo cambia la ISR) y global para verlo en el

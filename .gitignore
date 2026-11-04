@@ -34,3 +34,8 @@ hardware/
 
 # PDFs pesados de fabricante
 docs/*.pdf
+
+# --- Python y caches de herramientas ---
+__pycache__/
+*.pyc
+graphify-out/

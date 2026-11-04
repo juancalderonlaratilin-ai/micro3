@@ -91,9 +91,9 @@ Durante el reset los pines son entradas (alta impedancia), así que el buffer ve
 
 | ID | Evento | Fuente | Respuesta |
 |---|---|---|---|
-| EP1 | Llegó `SET_PWM` válido (CRC bueno) | parser (E6 de la especificación UART) | valida canal y rango, llama a `pwm_set`, encola `PWM_ACK` con el valor aplicado |
-| EP2 | Llegó `GET_PWM` válido | parser | encola `PWM_ACK` con el valor actual |
-| EP3 | Canal inválido o duty > 1023 | parser | **no toca el PWM**; encola `ERROR` con código 5 (canal) o 6 (rango) |
+| EP1 | Llegó una línea `P:I,534` o `P:Q,534` [PROPUESTA, §8] | lector de comandos de texto (por escribir) | valida canal y rango, llama a `pwm_set`, encola `OK:I,534\r\n` con el valor aplicado |
+| EP2 | Llegó `P?` | lector de comandos | encola `P:I,534,Q,512\r\n` con los valores actuales |
+| EP3 | Canal inválido o duty > 1023 | lector de comandos | **no toca el PWM**; encola `E:canal\r\n` o `E:rango\r\n` |
 | EP4 | Timer2 coincide con `T2PR` | hardware | copia el duty a la salida. **Sin ISR**, no consume CPU |
 | EP5 (fase siguiente) | Pasó el tiempo de establecimiento tras un cambio | Timer4 (ms) | el lazo de auto-cero ya puede leer el ADC. **No se implementa en esta fase** |
 
@@ -106,35 +106,35 @@ El PWM no agrega ninguna fuente a la ISR, así que el plazo de 174 µs de la rec
 | P1 | `pwm_init()` | arranque, antes de habilitar interrupciones | Timer2 (`CS` = Fosc/4, `T2PR` = 255, prescaler 1:1, `ON`), duty inicial de los dos canales, PPS, `TRIS`, `ANSEL`, `PWMxCON.EN` |
 | P2 | `bool pwm_set(uint8_t canal, uint16_t duty)` | programa principal | devuelve `false` si canal > 1 o duty > 1023 y no toca nada; si no, escribe DCH y DCL y guarda `pwmDuty` |
 | P3 | `uint16_t pwm_get(uint8_t canal)` | programa principal | devuelve `pwmDuty[canal]` (0xFFFF si el canal no existe) |
-| P4 | `cmd_set_pwm()` y `cmd_get_pwm()` | dentro de `parser_task()` | convierten el payload de la trama en llamadas a P2/P3 y encolan la respuesta con `tx_DAT` |
+| P4 | `cmd_task()` [PROPUESTA] | programa principal | junta los bytes de RX hasta `\n` (sin esperar), separa canal y número, llama a P2/P3 y encola la respuesta con `tx_string` |
 
 Reglas: sin `while` que espere, sin `__delay_ms`. Ninguna función de PWM se llama desde la ISR (así no se duplica código ni hay accesos compartidos). Archivos nuevos: `pwm.c` y `pwm.h`. Comentarios en español, línea por línea, con el formato fijo de `MASTER_PLAN.md`.
 
-## 8. Protocolo [PROPUESTA: extiende `especificacion_diseno_uart.md` §8.2]
+## 8. Comandos por serial [PROPUESTA, por replantear con T-07]
 
-Misma trama de 9 bytes (`A5 5A TYPE SEQ P0 P1 P2 P3 CRC8`), big-endian. Tipos nuevos:
+Desde el 2026-11-04 el enlace es **solo texto ASCII y solo PIC → PC** (`docs/especificacion_protocolo.md`). Para variar el PWM desde el PC hace falta que el PIC lea líneas de texto. Propuesta:
 
-| TYPE | Sentido | Nombre | P0 | P1–P2 | P3 |
-|---|---|---|---|---|---|
-| `0x10` | PC → PIC | SET_PWM | canal (0 = I0, 1 = Q0) | duty, 0 a 1023 (P1 = byte alto) | 0 |
-| `0x11` | PC → PIC | GET_PWM | canal | 0 | 0 |
-| `0x90` | PIC → PC | PWM_ACK | canal | duty aplicado | 0 |
-| `0x7F` | PIC → PC | ERROR (ya existe) | código **5** = canal inválido, **6** = duty fuera de rango | – | – |
+| Del PC al PIC | Respuesta del PIC | Qué hace |
+|---|---|---|
+| `P:I,534\n` | `OK:I,534\r\n` | pone el duty de I0 en 534 (0 a 1023) |
+| `P:Q,512\n` | `OK:Q,512\r\n` | igual para Q0 |
+| `P?\n` | `P:I,534,Q,512\r\n` | devuelve los dos valores actuales |
+| canal que no es `I` ni `Q` | `E:canal\r\n` | no cambia nada |
+| duty > 1023 o sin número | `E:rango\r\n` | no cambia nada |
 
-- Los códigos 1 a 4 de ERROR ya existen (CRC, tipo desconocido, overflow RX, error de hardware).
-- El `SEQ` de la respuesta copia el de la petición.
-- Ejemplo: poner I0 a 1,93 V → duty = 1,93 / 3,7 · 1024 ≈ 534 = `0x0216` → `A5 5A 10 01 00 02 16 00 CRC`.
-- **Dependencia:** esto necesita el parser de **T-04** (tramas con CRC-8). Ver D-3.
+- Las respuestas se mezclan con las líneas `I:…,Q:…` del ADC: el PC las distingue porque empiezan con otra letra. Caben: una respuesta es de ≤ 16 bytes y la línea va al 65,6 %.
+- Ejemplo: poner I0 a 1,93 V → duty = 1,93 / 3,7 · 1024 ≈ 534 → `P:I,534\n`.
+- Leer los números se hace con la operación inversa de `a_decimal` (multiplicar por 10 y sumar cada cifra), sin `scanf`.
 
 ## 9. Decisiones abiertas
 
 | ID | Decisión | Opciones | Mi recomendación |
 |---|---|---|---|
-| **D-1** | Cómo tratar la resolución (advertencia 1) | **A.** Aceptar ±20 cuentas y **restar el residuo en el PC/PIC** tras el auto-cero (el PWM deja la salida en el centro grueso; lo fino lo corrige software). **B.** Atenuar el PWM por hardware (divisor hacia Vref2): reduce el rango pero mejora el paso. Cambio de placa. **C.** Dithering: alternar duty entre dos valores vecinos en cada periodo de Timer2 para ganar 2 bits (12 bits efectivos, ±5 cuentas). Exige una ISR de Timer2 cada 64 µs o un postscaler | **A para empezar** (cero cambios de hardware ni de ISR) y medir el residuo real. Si no alcanza, evaluar C. Cambiar el criterio 5.3 a «≤ 20 cuentas con 10 bits» |
+| **D-1** | Cómo tratar la resolución (advertencia 1) | **A.** Aceptar ±20 cuentas y **restar el residuo en el PC/PIC** tras el auto-cero (el PWM deja la salida en el centro grueso; lo fino lo corrige software). **B.** Atenuar el PWM por hardware (divisor hacia Vref2): reduce el rango pero mejora el paso. Cambio de placa. **C.** Dithering: alternar duty entre dos valores vecinos en cada periodo de Timer2 para ganar 2 bits (12 bits efectivos, ±5 cuentas). Exige una ISR de Timer2 cada 64 µs o un postscaler | **A para empezar** (la persona está de acuerdo con los 10 bits, 2026-10-21; la resta es una operación de 16 bits por muestra, o se hace en el PC) (cero cambios de hardware ni de ISR) y medir el residuo real. Si no alcanza, evaluar C. Cambiar el criterio 5.3 a «≤ 20 cuentas con 10 bits» |
 | **D-2** | Criterio de rizado de la prueba 3.5 | dejar 0,9 mV, o corregir a 0,09 mV pp en I0 | corregir |
-| **D-3** | Cómo variar el duty por serial sin esperar a T-04 | **A.** Hacer primero T-04 (tramas y CRC) y encima SET_PWM. **B.** Comando provisional de 3 bytes sobre el eco, solo para bring-up, que se borra al llegar T-04 | **A.** El bring-up del PWM (T-06) no necesita serial: se prueba con duty fijo en el código. T-04 se hace en paralelo mientras se monta el filtro |
+| **D-3** | Cómo variar el duty por serial | **A.** Comandos de texto `P:I,534` (§8). **B.** Sin serial: duty fijo en el código y se recompila para cada valor | **B para T-06** (el bring-up del PWM no necesita serial); **A** cuando se replantee T-07 |
 | **D-4** | Valor inicial del duty | 512 en ambos, o los valores del último ensayo | 512 |
-| **D-5** | Valores R y C del filtro | 2 etapas 10 kΩ + 220 nF como punto de partida | confirmar con el montaje real; la prueba 3.5 lo valida |
+| **D-5** | Valores R y C del filtro | era: 2 etapas pasivas 10 kΩ + 220 nF | **Reemplazada (2026-11-04):** la persona diseñará un filtro **activo de 2.º orden** en WEBENCH. Criterios (fc propuesta 30 Hz, entradas de WEBENCH, riesgo del rizado y pruebas) en `docs/criterios_filtro_pwm.md`. Los números de §2 de este archivo que hablan del filtro pasivo (rizado de 0,10 mV y 45 ms) quedan como referencia comparativa. T-06 no la necesita para empezar |
 
 ## 10. Pruebas
 
@@ -142,11 +142,11 @@ Se usan las del **Módulo 3** de `docs/protocolos_prueba.md` (3.1 a 3.9) con la 
 
 | ID | Qué se verifica | Procedimiento | Criterio |
 |---|---|---|---|
-| 3.10 | Cambio de duty por serial | `SET_PWM` canal 0 con duty 256, 512, 768; medir en el pin | ancho de pulso = duty · 62,5 ns, ±1 paso |
-| 3.11 | `GET_PWM` | pedir el valor tras cada `SET_PWM` | igual al enviado |
-| 3.12 | Canal inválido | `SET_PWM` canal 2 | `ERROR` código 5 y el PWM no cambia |
-| 3.13 | Duty fuera de rango | `SET_PWM` duty 1024 | `ERROR` código 6 y el PWM no cambia |
-| 3.14 | No bloquea | enviar `SET_PWM` en ráfaga mientras corre el eco/PING | ninguna trama perdida; el bucle principal nunca espera |
+| 3.10 | Cambio de duty por serial | `P:I,256`, `P:I,512`, `P:I,768`; medir en el pin | ancho de pulso = duty · 62,5 ns, ±1 paso |
+| 3.11 | Leer el valor | `P?` tras cada cambio | igual al enviado |
+| 3.12 | Canal inválido | `P:X,512` | `E:canal` y el PWM no cambia |
+| 3.13 | Duty fuera de rango | `P:I,1024` | `E:rango` y el PWM no cambia |
+| 3.14 | No bloquea | mandar 100 comandos seguidos mientras llegan las líneas del ADC | ninguna línea perdida (`adcLineasPerdidas` = 0); el bucle principal nunca espera |
 | 3.15 | Sentido del offset | subir el duty de I0 y medir VI_OUT con multímetro | VI_OUT **baja** ≈ 36 mV por paso |
 | 3.16 | Rango de captura | barrer I0 de 0 a 1023 con el tubo sano | existe un duty donde VI_OUT ≈ 1,85 V (y lo mismo en Q) |
 
@@ -154,9 +154,8 @@ Se usan las del **Módulo 3** de `docs/protocolos_prueba.md` (3.1 a 3.9) con la 
 
 | ID | Tarea | Criterio de aceptación |
 |---|---|---|
-| T-06 | `pwm.c/.h`: `pwm_init`, `pwm_set`, `pwm_get`. Duty fijo en `main`, **sin serial** | Pruebas 3.1 a 3.4 y 3.7 con osciloscopio y multímetro; el eco de T-03 sigue pasando 1.5 a 1.7 |
-| T-04 | Protocolo de tramas con CRC-8 (ya está en el plan) | Pruebas 2.1 a 2.8 |
-| T-07 | `SET_PWM` / `GET_PWM` / `PWM_ACK` sobre T-04 | Pruebas 3.10 a 3.14 |
+| T-06 | `pwm.c/.h`: `pwm_init`, `pwm_set`, `pwm_get`. Duty fijo en `main`, **sin serial** | Pruebas 3.1 a 3.4 y 3.7 con osciloscopio y multímetro; el envío ASCII sigue pasando 2.1 a 2.4 |
+| T-07 | Comandos de texto `P:I,…` / `P:Q,…` / `P?` (§8) | Pruebas 3.10 a 3.14 |
 | T-08 | Con el filtro montado y PCB2 conectada: ajuste manual del offset desde el PC | Pruebas 3.5, 3.6, 3.8, 3.9, 3.15 y 3.16 |
 
 Después viene el ADC y, encima de esto, el lazo de auto-cero (bisección con el signo de §1 y espera de ≥ 50 ms por paso, ≈ 10 pasos por canal ≈ 0,5 s).

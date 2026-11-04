@@ -53,7 +53,7 @@ void adc_iq_init(void)
     listo = false;
     adcParesPerdidos = 0;
 
-#if ADC_PIN_PRUEBA
+#if ADC_PIN_PRUEBA != 0
     /* 4. RC2 como salida digital en 0 (pin de prueba, D-4). PIN_MANAGER_Initialize() lo dejó
      *    como entrada analógica (ANSELC = 0x1F, TRISC = 0x2F).
      *    LATC2 = latch de salida de RC2: se pone en 0 ANTES de volverlo salida, para que no
@@ -63,6 +63,15 @@ void adc_iq_init(void)
     LATCbits.LATC2 = 0;
     ANSELCbits.ANSC2 = 0;
     TRISCbits.TRISC2 = 0;
+#endif
+
+#if ADC_PIN_PRUEBA == 2
+    /* 4b. RC2PPS = selector de salida de RC2 (PPS = Peripheral Pin Select): qué periférico
+     *     maneja el pin. 0x17 = TMR0_out, la salida del Timer0 (en el pin manager de MCC se ve
+     *     como "RC2->TMR0:TMR0"). Desde aquí el pin lo mueve el hardware, no LATC2.
+     *     No hace falta desbloquear PPS: tras el reset PPSLOCKED = 0 (notas §5).
+     *     Con el postscaler en 1:1 (T0CON0 = 0x80 en tmr0.c), TMR0_out cambia cada 1 ms. */
+    RC2PPS = 0x17;
 #endif
 
     /* 5. TMR0L = cuenta del Timer0 (en modo 8 bits va de 0 a TMR0H = 249). Se pone en 0 para que
@@ -75,7 +84,7 @@ void adc_iq_isr(void)
 {
     uint16_t resultado; /* el número que acaba de convertir el ADC (0 a 4095) */
 
-#if ADC_PIN_PRUEBA
+#if ADC_PIN_PRUEBA == 1
     LATCbits.LATC2 = 1; /* RC2 sube: empieza la ISR (se mide con el osciloscopio) */
 #endif
 
@@ -115,7 +124,7 @@ void adc_iq_isr(void)
         listo = true;
     }
 
-#if ADC_PIN_PRUEBA
+#if ADC_PIN_PRUEBA == 1
     LATCbits.LATC2 = 0; /* RC2 baja: termina la ISR */
 #endif
 }

@@ -11,11 +11,13 @@
 #include <stdint.h>
 
 /* [PRUEBA ADC] Cada cuántos pares (I, Q) se manda una línea. El ADC muestrea a 1 kHz, así que
- * 50 pares = 50 ms = 20 líneas por segundo. Va de 1 a 255 (el contador es de 8 bits);
- * adc_prueba.c lo revisa al compilar.
- * Ojo: con 20 líneas/s el Serial Plotter solo dibuja bien señales de menos de 10 Hz (la mitad
- * de 20, teorema de muestreo); para una señal más rápida, bajar este número. */
-#define PRUEBA_PARES_POR_LINEA 50
+ * 2 pares = 2 ms = 500 líneas por segundo (fs = 500 Hz, para medir SINAD a 5 Hz y 20 Hz con
+ * herramientas/interfaz_micro3.py). Va de 1 a 255 (el contador es de 8 bits); adc_prueba.c lo
+ * revisa al compilar.
+ * Uso de la línea: una línea "I:4095,Q:4095\r\n" son 15 bytes = 1,31 ms a 115200 baudios, así
+ * que caben cada 2 ms (66 % de la línea). Con 1 (cada par) NO caben: se perderían líneas.
+ * Antes era 50 (20 líneas/s): solo servía para ver señales de menos de 10 Hz. */
+#define PRUEBA_PARES_POR_LINEA 2
 
 /* [PRUEBA ADC] Líneas descartadas porque no cupieron en el buffer de TX (tx_string devolvió
  * false). "volatile" y global para verla en el depurador. Debe quedar en 0. */

@@ -24,7 +24,7 @@ CLEAN_SUBPROJECTS=${CLEAN_SUBPROJECTS_${SUBPROJECTS}}
 
 
 # Project Name
-PROJECTNAME=micro3
+PROJECTNAME=Micro_Firmware.X
 
 # Active Configuration
 DEFAULTCONF=default

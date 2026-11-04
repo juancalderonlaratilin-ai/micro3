@@ -6,7 +6,7 @@ Proyecto Micro 3 · Fase 2 · Fecha: 2026-10-30 · Estado: **código implementad
 >
 > **Etiquetas:** **[VERIFICADO]** = sale del datasheet (con página), del código o de un documento de `docs/`. **[CÁLCULO]** = cuenta propia comprobada con un script. **[PROPUESTA]** = decisión por aprobar. **[SIN VERIFICAR]** = dudas que se resuelven midiendo.
 >
-> **Fuentes:** indicaciones del profesor (chat, 2026-10-28); *Fundamentals of Precision ADC Noise Analysis* de TI (SLYY192A, marzo 2025), citado como «TI»; el preinforme de la Práctica 2; el datasheet DS40001985C («DS»); y el código recibido el 2026-10-30 (`adc_iq.c/.h`, `adc_prueba.c/.h`, `main.c`, `protocol.c/.h`, `mcc_generated_files/adcc.*` y `tmr0.*`).
+> **Fuentes:** indicaciones del profesor (chat, 2026-10-28); *Fundamentals of Precision ADC Noise Analysis* de TI (SLYY192A, marzo 2025), citado como «TI»; el preinforme de la Práctica 2; el datasheet DS40001985C («DS»); y el código recibido el 2026-10-30 (`adc_iq.c/.h`, `main.c`, `mcc_generated_files/adcc.*` y `tmr0.*`; el envío de texto está hoy en `adc_ascii.c/.h`).
 
 ---
 
@@ -31,7 +31,7 @@ Proyecto Micro 3 · Fase 2 · Fecha: 2026-10-30 · Estado: **código implementad
 Timer0 (cada 1 ms, por hardware) ──► ADGO = 1 ──► convierte I (RC0)
         adc_iq_isr: guarda I, ADPCH = Q, ADGO = 1 ──► convierte Q (RC1)
         adc_iq_isr: guarda Q, ADPCH = I, deja el par listo ──► avisa a main (cada 1 ms)
-main:   adc_iq_get() ──► protocol_send_iq() ──► trama DATA_IQ (1000/s, sin promedio)
+main:   adc_iq_get() ──► adc_ascii_task() ──► línea "I:xxxx,Q:xxxx\r\n" (1 de cada 2 pares: 500/s, sin promedio)
 ```
 
 | Dato | Valor | Dónde / fuente |
@@ -45,13 +45,13 @@ main:   adc_iq_get() ──► protocol_send_iq() ──► trama DATA_IQ (1000/
 | Canales | `CANAL_I = 0x10` (RC0/ANC0), `CANAL_Q = 0x11` (RC1/ANC1) (DS p.528) | `adcc.h` |
 | Referencia | `ADREF = 0x00`: `ADPREF = VDD`, `ADNREF = VSS`; ver §7.1 | `adcc.c` |
 | Interrupción | `ADIE = 1`; `interrupt_manager.c` llama a `adc_iq_isr()` si `ADIE` y `ADIF` | cambio C-11 (§11) |
-| Promedio | **ninguno** (desde el 2026-11-03; reemplaza D-1): una muestra de I y una de Q por par, 1000 pares/s | `adc_iq.c` |
-| Pin de prueba | `ADC_PIN_PRUEBA = 1`: RC2 sube mientras corre `adc_iq_isr()` (D-4) | `adc_iq.h` |
-| Contadores | `adcParesPerdidos` y `adcTramasPerdidas` deben quedar en 0 | `adc_iq.c`, `main.c` |
+| Promedio | **ninguno** (desde el 2026-11-03; reemplaza D-1): una muestra de I y una de Q por par, 1000 pares/s en el PIC; al PC llegan 500/s | `adc_iq.c`, `adc_ascii.h` |
+| Pin de prueba | `ADC_PIN_PRUEBA = 2`: RC2 saca la salida del Timer0 (cuadrada de 500 Hz, cada flanco = un disparo). Con `1`, RC2 sube mientras corre `adc_iq_isr()` (D-4) | `adc_iq.h` |
+| Contadores | `adcParesPerdidos` y `adcLineasPerdidas` deben quedar en 0 | `adc_iq.c`, `adc_ascii.c` |
 
 Sin promedio, ni la ISR ni `adc_iq_get` suman o dividen: la ISR deja el par listo al terminar Q y `adc_iq_get` lo copia con `ADIE` apagado. Si `main` tarda más de 1 ms en leerlo, el par se pierde y se cuenta en `adcParesPerdidos`.
 
-**Cuidado con el modo actual de `main.c`:** el `main.c` copiado del zip trae `MODO_PRUEBA_ADC = 1`. Con eso el bucle solo manda texto para el Serial Plotter (§9) y **no atiende el protocolo ni el eco**. Para volver al protocolo hay que poner 0 y recompilar.
+**Envío al PC:** `main.c` tiene un solo modo: llama a `adc_ascii_task()`, que manda una línea `I:xxxx,Q:xxxx\r\n` cada `ADC_PARES_POR_LINEA` = 2 pares (§11).
 
 ### 2.1 Fuente de disparo (`ADACT`): cuál usamos y por qué
 
@@ -249,8 +249,8 @@ Sin promedio (desde el 2026-11-03), el jitter de Q entra completo en cada muestr
 **Cómo se mide** [PROPUESTA]:
 
 1. Generador de funciones conectado **directo** al pin RC0 (y luego a RC1), a través de ≤ 10 kΩ, **sin PCB2**: el requisito es del ADC. Senoidal centrada en 1,85 V con 1,7 V de amplitud (sin recorte: de 0,15 V a 3,55 V). Se repite con una de 0,5 V para ver la dependencia.
-2. Frecuencias de 5 Hz y de 20 Hz (la banda del diseño). Para que quepan ciclos enteros: con `fs = 1000 Hz`, `M = 4096` y `k = 83` ciclos, `f = 20,26 Hz`; con `k = 21`, `f = 5,127 Hz` (`k` impar para que no se repitan códigos). Si el generador no se puede sincronizar, la ventana de Kaiser del script reduce el error.
-3. Captura de 4096 pares por `DATA_IQ` (sin promedio: 1000 tramas/s = 78 % de la línea, 4,1 s). Cada par ya es el ADC puro. Si `adcTramasPerdidas` sube o `SEQ` salta, no vale esa captura.
+2. Frecuencias de 5 Hz y de 20 Hz (la banda del diseño). Para que quepan ciclos enteros: con `fs = 500 Hz` en el PC, `M = 4096` y `k = 163` ciclos, `f = 19,90 Hz`; con `k = 41`, `f = 5,005 Hz` (`k` impar para que no se repitan códigos). Si el generador no se puede sincronizar, la ventana de Kaiser del script reduce el error.
+3. Captura de 4096 pares por las líneas ASCII (500 líneas/s = 65,6 % de la línea, 8,2 s). Cada par ya es el ADC puro: el PIC manda 1 de cada 2, sin promediar. Si `adcLineasPerdidas` sube o el PC mide menos de 500 líneas/s, no vale esa captura.
 4. Calcular con el script de abajo.
 
 ```python
@@ -355,12 +355,12 @@ if sigma > 0:
     print(f"resol. efectiva: {np.log2(FSR/sigma):.2f} bits  libre de ruido: {np.log2(FSR/(6.6*sigma)):.2f} bits")
 ```
 
-## 9. Prueba temporal con el Serial Plotter (`adc_prueba`)
+## 9. Ver I y Q en el Serial Plotter
 
-- **Qué es:** código **temporal** (`adc_prueba.c/.h`) que, con `MODO_PRUEBA_ADC = 1`, manda `I:2048,Q:2051\r\n` (hasta 15 bytes) cada 50 pares. Es el formato `nombre:valor` del Serial Plotter de Arduino IDE.
-- **Límites:** 20 líneas/s, así que solo dibuja bien señales de menos de 10 Hz. **No sirve** para el SINAD ni para el histograma (decima por 50 y pliega). No usa el protocolo.
-- **Para qué:** ver que I y Q siguen a un generador conectado a RC0 y RC1, y que `adcPruebaLineasPerdidas` queda en 0.
-- **Resultado:** pendiente. La persona anota el resultado en `docs/estado.md` (qué señal, qué frecuencia, qué se vio y valores de los contadores).
+- Las líneas `I:2048,Q:2051\r\n` (hasta 15 bytes) que manda `adc_ascii.c` tienen el formato `nombre:valor` del Serial Plotter de Arduino IDE: se ven directo, sin programa intermedio.
+- A 500 líneas/s corre rápido. Para mirar con calma una señal lenta se puede subir `ADC_PARES_POR_LINEA` (50 = 20 líneas/s), pero así **no sirve** para el SINAD ni para el histograma (decima por 50 y pliega). Para medir, dejarlo en 2.
+- **Para qué:** ver que I y Q siguen a un generador conectado a RC0 y RC1, y que `adcLineasPerdidas` queda en 0.
+- **Resultado:** la persona confirmó el 2026-11-04 que el modo ASCII funciona. Falta anotar en `docs/estado.md` qué señal, qué frecuencia y los contadores.
 
 ## 10. Multiplexado de I y Q (decisión adoptada)
 
@@ -379,19 +379,18 @@ En el caso A es despreciable. En el B no lo es para un plano de impedancia I vs 
 
 **Alternativas descartadas por ahora:** alternar canales a 2 kHz (un canal por tick: sesgo de 500 µs, error de 6 % a 20 Hz) y muestreo simultáneo con dos circuitos de muestreo y retención o un ADC externo (innecesario con 20 Hz).
 
-## 11. Protocolo de los datos (decisión D-2)
+## 11. Envío de los datos al PC (texto ASCII)
 
-Misma trama de 9 bytes (`docs/especificacion_protocolo.md` §2). Tipos nuevos [VERIFICADO en `protocol.h`/`protocol.c`]:
+Desde el 2026-11-04 (decisión de la persona) los datos van como texto, una línea por par (`docs/especificacion_protocolo.md`):
 
-| `TYPE` | Sentido | Nombre | Payload |
-|---|---|---|---|
-| `0x20` | PC → PIC | `ADC_STREAM` | `P0` = 0 detener, ≠ 0 iniciar el envío |
-| `0xA0` | PIC → PC | `ADC_ACK` | copia el `SEQ` de la petición; `P0` = estado resultante (0 o 1) |
-| `0xA1` | PIC → PC | `DATA_IQ` | I en `P0:P1`, Q en `P2:P3`, big-endian (12 bits en 16); `SEQ` propio 0–255 que **sube aunque la trama no quepa**, para que el PC vea el salto |
+```
+I:2048,Q:2051\r\n
+```
 
-- Al arrancar, el envío está **apagado**: el PC lo enciende con `ADC_STREAM`.
-- Ocupación de la línea (781 µs por trama): 1000 tramas/s = **78 %** (sin promedio, desde el 2026-11-03). Con el promedio de 5 de antes eran 200 tramas/s = 15,6 %.
-- Falta documentar estos tipos en `docs/especificacion_protocolo.md` (hecho en la sección 2 de ese archivo) y probarlos en el chip.
+- Una línea cada `ADC_PARES_POR_LINEA` = 2 pares: **500 líneas/s**, fs = 500 Hz en el PC. El ADC sigue muestreando a 1 kHz con el Timer0, así que el instante de cada muestra no cambia.
+- Ocupación de la línea: 15 bytes × 500 / 11 429 B/s = **65,6 %**. Una línea por par (1000/s) no cabe: tardaría 1,31 ms cada 1 ms.
+- El envío empieza solo al encender el PIC; no hay comandos del PC.
+- Sin suma de verificación ni número de secuencia: una línea dañada se descarta en el PC si pierde la forma `I:número,Q:número`; una perdida no se ve (por eso se revisan `adcLineasPerdidas` y las líneas por segundo).
 
 ## 12. Decisiones y cambios que cita el código
 
@@ -400,7 +399,7 @@ El código cita `docs/instrucciones_claude_code_adc.md`, que **no estaba en la c
 | ID | Qué dice el código | Dónde |
 |---|---|---|
 | D-1 | `ADC_N_PROMEDIO = 5`. **Retirada el 2026-11-03** por la persona: ya no hay promedio | (antes `adc_iq.h`) |
-| D-2 | tipos de trama `0x20`, `0xA0`, `0xA1` | `protocol.h` |
+| D-2 | formato de los datos hacia el PC. **Cambiado el 2026-11-04**: ahora líneas de texto `I:…,Q:…` (§11) | `adc_ascii.c` |
 | D-3 | no aparece en el código | – |
 | D-4 | pin de prueba RC2 durante la ISR | `adc_iq.h` |
 | C-11 | `interrupt_manager.c` llama directo a `adc_iq_isr()` (antes iba por el puntero `ADCC_ADI_InterruptHandler`) | `interrupt_manager.c` |
@@ -436,7 +435,7 @@ El código cita `docs/instrucciones_claude_code_adc.md`, que **no estaba en la c
 - [ ] Confirmar `ADACQ` con la prueba 4.16 y calcularlo con la fórmula de §3.1 (con 20 % de margen); bajarlo si la adquisición real es de 320 µs.
 - [ ] Mantener cortas las ISR de la UART (pruebas 1.10 y 1.11) para el jitter de Q.
 - [ ] Detectar saturación (códigos cerca de 0 o 4095) y pasar a ERROR/ALARM.
-- [ ] `MODO_PRUEBA_ADC = 0` para volver al protocolo.
+- [ ] Revisar en el depurador que `adcLineasPerdidas` y `adcParesPerdidos` queden en 0 a 500 líneas/s.
 
 **Validación:** histograma (§8), SINAD (§6), periodo de muestreo y duración de la ISR con RC2 (pruebas 4.5, 4.13 y 4.16) y jitter de Q (4.17).
 

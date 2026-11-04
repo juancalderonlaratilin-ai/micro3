@@ -1,6 +1,6 @@
 # Interfaz de mediciones del ADC (Python)
 
-`herramientas/interfaz_micro3.py` es una ventana que recibe las tramas de 9 bytes del PIC, muestra I y Q en vivo y calcula las mediciones del ADC: **SINAD, ENOB, SNR, THD, SFDR**, ruido rms, histograma de códigos y plano I-Q.
+`herramientas/interfaz_micro3.py` es una ventana que recibe las líneas de texto `I:2048,Q:2051` del PIC (500 por segundo, `docs/especificacion_protocolo.md`), muestra I y Q en vivo y calcula las mediciones del ADC: **SINAD, ENOB, SNR, THD, SFDR**, ruido rms, histograma de códigos y plano I-Q.
 
 ## 1. Instalar y abrir
 
@@ -8,22 +8,45 @@ Una sola vez:
 ```
 pip install pyserial numpy matplotlib
 ```
-Abrir (desde la carpeta `herramientas`, donde también está `receptor_micro3.py`):
+Abrir (desde la carpeta `herramientas`):
 ```
 python interfaz_micro3.py
 ```
-El firmware debe estar con `MODO_PRUEBA_ADC 0` y `MODO_ECO 0`. Cierra LabVIEW, el Arduino IDE o cualquier otro programa que tenga abierto el COM.
+El PIC manda solo al encenderse: no hay que configurar nada en el firmware ni mandarle comandos. Cierra LabVIEW, el Arduino IDE o cualquier otro programa que tenga abierto el COM.
+
+La frecuencia de muestreo (fs) se calcula sola con las líneas que llegan y se usa en el eje de tiempo, el espectro y el SINAD. Sale en el estado: `(498 /s → fs = 500 Hz)`. Si se cambia `ADC_PARES_POR_LINEA` en `adc_ascii.h`, la interfaz se ajusta sola (fs = 1000 / ese número).
 
 ## 2. La ventana
 
 | Zona | Qué hace |
 |---|---|
-| **1. Conexión** | elige el COM del CP2102 y presiona **Conectar**. Para probar sin PIC hay dos simuladores: senoidal de 20 Hz y continua de 1,85 V |
-| **2. Estado** | si llegó el ADC_ACK, muestras recibidas, muestras/s (debe dar ≈ 1000), CRC malos y tramas perdidas (deben quedar en 0) |
+| **1. Conexión** | elige el COM del CP2102 y presiona **Conectar**. Para probar sin PIC hay dos simuladores: senoidal de 20 Hz y continua de 1,85 V (los dos a 500 líneas/s) |
+| **2. Estado** | muestras recibidas, muestras/s (debe dar ≈ 500), líneas malas (debe quedar en 0 o 1, la primera suele llegar cortada) y el último I/Q con su mínimo y máximo |
 | **3. Medición** | canal (I o Q), tipo de medición, cuántas muestras analizar y **Analizar ahora** (o «Analizar cada 1 s») |
-| **4. Guardar** | CSV con todas las muestras; reporte en `.txt` con las 4 gráficas en PNG |
+| **4. Guardar** | CSV con todas las muestras (con su tiempo); reporte en `.txt` con las 4 gráficas en PNG |
 | **Resultados** | los números de la última medición; el SINAD sale en verde si cumple ≥ 60 dB y en rojo si no |
 | **Pestañas** | *Señal en vivo* (últimos 2 s), *Espectro* (dBFS, con la fundamental y los armónicos marcados), *Histograma* (un bin por código), *Plano I-Q* |
+
+### 2.1 Si la gráfica sale vacía o rara
+
+La zona **2. Estado** muestra el último código de I y Q (y en voltios) y el mínimo/máximo del último segundo. Con eso se sabe qué pasa:
+
+| Lo que ves | Qué significa | Qué hacer |
+|---|---|---|
+| «No llega nada» | el PC no recibe líneas | revisa el COM, JP_TX, que el PIC esté programado y la GND común |
+| I y Q en **0** (o casi) | no llega señal al pin | revisa la entrada J2/J7 y los jumpers JP_IN_I/Q y JP_ADC_I/Q |
+| I o Q en **4095** (aviso «pegado a 4095») | el pin está en VDD (3,7 V) o la señal recorta | mide el pin (RC0 = pata 10, RC1 = pata 9) con el multímetro; si da 3,7 V es el circuito, no el código. Revisa jumpers, que la GND del generador esté unida a la de la placa y baja la amplitud u offset |
+| códigos **> 4095** | el ADC está justificado a la izquierda | revisa ADFM = 1 en MCC |
+| aviso «Solo 20 líneas/s» | `ADC_PARES_POR_LINEA` está en 50 | ponlo en 2 en `adc_ascii.h` para medir SINAD |
+| ≈ 500 /s y códigos entre 100 y 4000 | todo bien | — |
+
+Si los datos se salen de 0–3,7 V, el eje vertical se ajusta solo para que siempre se vean.
+
+### 2.2 Programar el firmware
+
+1. MPLAB X → **File → Open Project** → `Documents\micro3\firmware\Micro_Firmware.X` y márcalo como *Main Project* (clic derecho → Set as Main Project).
+2. **Clean and Build** y luego **Make and Program Device** con la SNAP.
+3. Abre la interfaz: debe decir ≈ 500 /s.
 
 ## 3. Prueba de SINAD (prueba 4.15)
 
@@ -32,7 +55,7 @@ El firmware debe estar con `MODO_PRUEBA_ADC 0` y `MODO_ECO 0`. Cierra LabVIEW, e
 3. **En la interfaz:**
    1. Canal I, tipo «Senoidal», 4096 muestras (o 8192 o 10 000).
    2. Deja «f entrada» vacío: la frecuencia se detecta sola.
-   3. Espera unos 5 s y presiona **Analizar ahora**.
+   3. Espera unos 10 s (4096 muestras a 500 por segundo tardan 8,2 s) y presiona **Analizar ahora**.
 4. **Criterio:** SINAD ≥ 60 dB (ENOB ≥ 9,67 bits) a 5 Hz y a 20 Hz, en I y en Q.
 5. **Guardar reporte** para el preinforme: guarda los números y las gráficas.
 
@@ -49,7 +72,7 @@ Qué significa cada número:
 
 Avisos que puede mostrar:
 - **Recorte:** la señal toca 0 o 4095. Baja la amplitud del generador.
-- **Muy pocos ciclos:** con 4096 muestras hacen falta al menos 4 Hz.
+- **Muy pocos ciclos:** hacen falta al menos 14 ciclos en la captura (con 4096 muestras a 500 Hz, unos 2 Hz).
 - **No se ve una senoidal:** probablemente la entrada es continua.
 
 ## 4. Prueba de ruido con entrada fija (pruebas 4.3 y 8.1 del preinforme)

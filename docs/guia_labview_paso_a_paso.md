@@ -1,10 +1,10 @@
-# LabVIEW paso a paso: recibir la trama de 9 bytes del PIC
+# LabVIEW paso a paso: recibir las líneas `I:…,Q:…` del PIC
 
 Guía para alguien que casi no ha usado LabVIEW. Vamos bloque por bloque y cable por cable. Está hecha para **LabVIEW 2021**.
 
-Vas a hacer **dos VIs**:
-1. **CRC8.vi**: un VI pequeño que calcula el CRC de 6 bytes. Se usa dentro del otro.
-2. **Receptor Micro3.vi**: el principal. Abre el puerto, recibe las tramas, saca I y Q y las grafica.
+El PIC manda, sin que se le pida nada, 500 líneas por segundo así: `I:2048,Q:2051\r\n` (formato: `docs/especificacion_protocolo.md`). El VI tiene que hacer cuatro cosas: abrir el puerto, leer una línea, separar los dos números y graficarlos. Es **un solo VI**, sin subVIs.
+
+Antes de empezar, comprueba que llegan las líneas con el Serial Plotter del Arduino IDE o con `python receptor_micro3.py COM5` (`docs/receptor_python_y_serial_plotter.md`), y **ciérralos**: solo un programa a la vez puede tener abierto el COM.
 
 ---
 
@@ -44,12 +44,11 @@ Vas a hacer **dos VIs**:
 
 - Clic derecho sobre **una entrada** de un bloque → **Create → Constant**: crea una constante del tipo correcto ya conectada.
 - Clic derecho sobre **una salida** → **Create → Indicator**: crea un indicador en el panel frontal ya conectado.
-- **Cambiar el tipo de un número:** clic derecho sobre la constante → **Representation** → elegir (**U8** = byte de 0 a 255, **U16** = 0 a 65535, **I32** = entero normal).
+- **Cambiar el tipo de un número:** clic derecho sobre la constante → **Representation** → elegir (**I32** = entero normal, **DBL** = decimal).
 
 ### 0.6 Tres estructuras que vas a usar
 
 - **While Loop** (Programming → Structures → While Loop): repite lo de adentro hasta que se cumpla la condición de paro. Se dibuja arrastrando un rectángulo. Abajo a la derecha tiene la **terminal de condición** (un circulito rojo 🔴 = «parar si es verdadero»).
-- **For Loop** (Programming → Structures → For Loop): repite un número fijo de veces (la **N** de arriba a la izquierda).
 - **Case Structure** (Programming → Structures → Case Structure): es un «if». Tiene dos páginas, **True** y **False**. Se cambia de página con las flechitas ◀ ▶ del título. La entrada **?** de la izquierda decide qué página se ejecuta.
 
 ### 0.7 Shift register (el que más confunde)
@@ -63,405 +62,107 @@ Es la «memoria» de un bucle: guarda un valor de una vuelta para la siguiente.
 
 Cuando un cable cruza el borde de un bucle o de un Case aparece un **túnel**.
 - En un **Case**, un túnel de salida **relleno** ■ está bien conectado en todas las páginas. Si está **hueco** □, falta conectarlo en alguna página: revisa todas. *(Si no lo haces, LabVIEW manda «vacío» por ahí y pierdes los datos.)*
-- En un **For Loop**, un túnel de entrada con el símbolo **[ ]** está **indexado**: en cada vuelta entra **un elemento** del arreglo. Un cuadrito **negro** ■ significa que entra el arreglo completo. Se cambia con clic derecho en el túnel → **Enable Indexing** / **Disable Indexing**.
+- En un **While Loop**, un túnel de salida se puede volver **indexado** (clic derecho → **Enable Indexing**): junta un valor por vuelta en un arreglo. Aquí **no** se usa: deja los túneles normales.
 
 ---
 
-## PARTE 1. El subVI CRC8.vi
+## PARTE 1. Panel frontal
 
-**Qué hace:** recibe 6 bytes y devuelve el CRC-8 (polinomio 7, empezando en 0). Es la misma cuenta que hace el PIC.
+Ctrl + E hasta ver el fondo gris. Clic derecho en el panel para la paleta de controles.
 
-Abre un VI nuevo: **File → New VI**.
+| # | Qué poner | Ruta en la paleta | Nombre (doble clic en la etiqueta para cambiarlo) |
+|---|---|---|---|
+| P1 | Selector del puerto | Modern → I/O → **VISA resource name** | `Puerto` |
+| P2 | Gráfica en el tiempo | Modern → Graph → **Waveform Chart** | `I y Q (V)` |
+| P3 | Plano I-Q | Modern → Graph → **XY Graph** | `Plano I-Q` (opcional, PARTE 4) |
+| P4 | Dos números | Modern → Numeric → **Numeric Indicator** (dos veces) | `I (código)` y `Q (código)` |
+| P5 | Contador | Modern → Numeric → **Numeric Indicator** | `Líneas malas` |
+| P6 | Botón de parar | Modern → Boolean → **Stop Button** | `STOP` |
 
-### 1.1 Panel frontal (2 cosas)
+En la Waveform Chart: clic derecho → **Properties** → pestaña *Scales* → eje Y de **0 a 3.7**, y desmarca *Autoscale*. Clic derecho → **Chart History Length** → `2000` (4 s a 500 líneas/s).
 
-**[P1] Control «bytes»** (arreglo de U8)
-1. Clic derecho en el panel → **Modern → Array, Matrix & Cluster → Array**. Ponlo en el panel: es una caja vacía.
-2. Clic derecho en el panel → **Modern → Numeric → Numeric Control**. Arrástralo **adentro** de la caja del arreglo.
-3. Clic derecho sobre el número de adentro → **Representation → U8**.
-4. Cambia el nombre (doble clic en la etiqueta) a `bytes`.
+## PARTE 2. Abrir el puerto (fuera del bucle)
 
-**[P2] Indicador «crc»**
-1. Clic derecho en el panel → **Modern → Numeric → Numeric Indicator**.
-2. Clic derecho → **Representation → U8**.
-3. Nombre: `crc`.
+Ctrl + E para pasar al diagrama de bloques. Los terminales de P1 a P6 ya están ahí.
 
-### 1.2 Diagrama de bloques
+**B1. VISA Configure Serial Port** (Instrument I/O → Serial → VISA Configure Serial Port). Ponlo a la izquierda. Conecta en sus entradas (usa la Ayuda contextual, Ctrl + H):
 
-Pasa al diagrama (**Ctrl + E**). Ya verás dos terminales: `bytes` y `crc`.
-
-**[C1] For Loop grande** (Programming → Structures → For Loop). Dibújalo grande, que quepa otro adentro.
-
-**[C2] Túnel de entrada indexado**
-- Cable: salida de la terminal **`bytes`** → borde izquierdo de **[C1]**. Aparece un túnel.
-- Fíjate que el túnel muestre **[ ]**. Si es un cuadrito negro: clic derecho en el túnel → **Enable Indexing**.
-- *Así en cada vuelta entra un byte, y el bucle da 6 vueltas solo (no hace falta conectar la N).*
-
-**[C3] Shift register del bucle grande**
-- Clic derecho en el borde de **[C1]** → **Add Shift Register**. Aparecen ▼ (izquierda) y ▲ (derecha).
-
-**[C4] Constante 0 (valor inicial del CRC)**
-- Ponla **fuera** del bucle, a la izquierda: clic derecho → **Programming → Numeric → Numeric Constant**, escribe `0`.
-- Clic derecho sobre ella → **Representation → U8**.
-- Cable: **[C4]** → flechita **▼ izquierda de [C3]**.
-
-**[C5] Exclusive Or** (Programming → Boolean → Exclusive Or). Va **dentro de [C1]**, pero **fuera** del bucle pequeño.
-- Cable: flechita **▼ izquierda de [C3]** → entrada **x** de [C5].
-- Cable: túnel **[C2]** (desde adentro) → entrada **y** de [C5].
-- *Esto mezcla el byte nuevo con el CRC acumulado.*
-
-**[C6] For Loop pequeño**, dentro de [C1], a la derecha de [C5].
-- Clic derecho en la **N** de [C6] → **Create Constant** → escribe `8`. *(8 vueltas = 8 bits.)*
-
-**[C7] Shift register del bucle pequeño**
-- Clic derecho en el borde de **[C6]** → **Add Shift Register**.
-- Cable: salida de **[C5]** → flechita **▼ izquierda de [C7]**.
-
-Ahora **todo lo siguiente va DENTRO de [C6]**:
-
-**[C8] And** (Programming → Boolean → And)
-- Cable: flechita **▼ izquierda de [C7]** → entrada **x** de [C8].
-- Entrada **y** de [C8]: clic derecho → **Create → Constant** → escribe `128` (128 es 0x80, el bit más alto) → clic derecho → **Representation → U8**.
-
-**[C9] Not Equal To 0?** (Programming → Comparison → Not Equal To 0?)
-- Cable: salida de **[C8]** → entrada **x** de [C9].
-- *Da verdadero si el bit más alto vale 1.*
-
-**[C10] Logical Shift** (Programming → Numeric → Data Manipulation → Logical Shift)
-- Cable: flechita **▼ izquierda de [C7]** → entrada **x** de [C10]. *(El mismo cable puede ir a varios lugares: haz clic sobre el cable existente y llévalo al otro bloque.)*
-- Entrada **y** de [C10]: **Create → Constant** → `1` (correr un bit a la izquierda).
-- *Si en tu diagrama tenías un bloque de multiplicar (×), bórralo: este lo reemplaza.*
-
-**[C11] Exclusive Or** (otro, Programming → Boolean → Exclusive Or)
-- Cable: salida de **[C10]** → entrada **x** de [C11].
-- Entrada **y** de [C11]: **Create → Constant** → `7` → **Representation → U8**.
-
-**[C12] Select** (Programming → Comparison → Select). Tiene 3 entradas: **t** (arriba), **s** (al medio, verde) y **f** (abajo).
-- Cable: salida de **[C11]** → entrada **t** (lo que sale si es verdadero).
-- Cable: salida de **[C9]** → entrada **s** (la que decide).
-- Cable: salida de **[C10]** → entrada **f** (lo que sale si es falso).
-- Cable: salida de **[C12]** → flechita **▲ derecha de [C7]**.
-
-**Borra el bloque `U16`** si lo tienes: todo debe quedar en U8.
-
-Ahora fuera del bucle pequeño:
-
-**[C13]** Cable: flechita **▲ derecha de [C7]** (por fuera de [C6]) → flechita **▲ derecha de [C3]**.
-
-**[C14]** Cable: flechita **▲ derecha de [C3]** (por fuera de [C1]) → terminal **`crc`**.
-
-### 1.3 Probarlo
-
-1. En el panel frontal, escribe en `bytes`, de a uno: `161`, `5`, `8`, `0`, `8`, `3` (es `A1 05 08 00 08 03` en decimal).
-2. Corre el VI (flecha **Run**). En `crc` debe salir **2**.
-3. Prueba también `32`, `0`, `1`, `0`, `0`, `0` → debe salir **45**.
-
-Si sale otra cosa: revisa que todas las constantes estén en U8 y que la entrada **s** del Select venga de [C9].
-
-### 1.4 Convertirlo en subVI (para usarlo como un bloque)
-
-1. En el panel frontal, arriba a la derecha, hay dos cuadros: el ícono y, a su izquierda, el **conector** (un cuadro dividido en casillas).
-2. Haz clic en una casilla de la **izquierda** del conector y después clic en el control `bytes`. La casilla se pinta.
-3. Haz clic en una casilla de la **derecha** del conector y después clic en el indicador `crc`.
-4. Guarda: **File → Save As** → `CRC8.vi`, en la misma carpeta donde vas a guardar el VI principal.
-
----
-
-## PARTE 2. El VI principal: Receptor Micro3.vi
-
-### 2.0 Qué hace, en palabras
-
-1. Configura el puerto COM a 115200.
-2. Manda al PIC «empieza a enviar».
-3. En un bucle: lee lo que llegó y lo agrega a un texto acumulado («buffer»).
-4. En un bucle de adentro: mientras en el buffer haya una trama completa (empieza con A5 5A y tiene 9 bytes), la saca, revisa el CRC, saca I y Q y los guarda en dos listas. Después la borra del buffer.
-5. Al terminar: manda «para», cierra el puerto y guarda un archivo CSV.
-
-**Lo que ya tienes en tu diagrama y se queda:** el `Puerto COM`, el VISA Configure Serial Port, el VISA Write, el While Loop, el Property Node `Bytes at Port`, el `> 0`, el Case con el VISA Read, el Wait de 10 y el `stop`. Abajo te digo qué arreglar en cada uno y qué agregar.
-
-### 2.1 Panel frontal
-
-| Nombre | Cómo crearlo | Para qué |
-|---|---|---|
-| `Puerto COM` | ya lo tienes (VISA resource name) | elegir el COM del CP2102 |
-| `stop` | ya lo tienes | parar a mano |
-| `Muestras a capturar` | Modern → Numeric → Numeric Control, Representation I32, valor `10000` | parar solo |
-| `CRC malos` | Numeric Indicator, I32 | tramas dañadas |
-| `Muestras` | Numeric Indicator, I32 | cuántas llevas |
-| `Gráfica` | Modern → Graph → Waveform Graph | ver I y Q en voltios |
-| `Archivo CSV` | Modern → String & Path → File Path Control | dónde guardar (escribe una ruta como `C:\Users\Tatan\Documents\captura.csv`) |
-
-### 2.2 Antes del bucle (la parte de la izquierda)
-
-Aquí todo va en **cadena**: el cable **morado** (`VISA resource name out`) y el cable de **error** (`error out`) de cada bloque entran al siguiente (`VISA resource name` y `error in`). Siempre los dos.
-
-**[A1] VISA Configure Serial Port** (ya lo tienes; Instrument I/O → Serial → VISA Configure Serial Port). Con **Ctrl + H** revisa a qué entrada va cada constante:
-- `VISA resource name` ← tu control **`Puerto COM`**.
-- `baud rate` ← `115200` ✓
-- `data bits` ← `8` ✓
-- `stop bits` ← `1.0` ✓
-- `enable termination char` ← **F** (falso) ✓ *(Es importante: si queda en verdadero, LabVIEW corta la lectura cuando llega un byte 0x0A, que puede aparecer dentro de una trama.)*
-- `timeout` ← el `200` que tienes: comprueba con Ctrl + H que esté en **timeout** y no en *termination char*.
-- `parity` y `flow control` sin conectar está bien (quedan en «None»).
-
-**[A2] VISA Set I/O Buffer Size** (Instrument I/O → Serial → VISA Set I/O Buffer Size; si no lo ves ahí, búscalo con Ctrl + Espacio). *Agranda la memoria de recepción de Windows.*
-- `VISA resource name` ← `VISA resource name out` de [A1].
-- `error in` ← `error out` de [A1].
-- `mask` ← Create → Constant → `16` (recepción).
-- `size` ← Create → Constant → `16384`.
-
-**[A3] VISA Flush I/O Buffer** (Instrument I/O → Serial → VISA Flush I/O Buffer). *Borra lo que llegó antes (por ejemplo el texto «Micro3 listo»).*
-- `VISA resource name` ← salida de [A2]; `error in` ← `error out` de [A2].
-- `mask` ← Create → Constant → `16`.
-
-**[A4] VISA Write** (ya lo tienes). **Cambia su constante de texto:**
-- `VISA resource name` ← salida de [A3]; `error in` ← `error out` de [A3].
-- `write buffer` ← la constante rosada. **Arréglala así:**
-  1. Haz clic sobre ella y borra todo el texto.
-  2. Clic derecho sobre ella → asegúrate de que esté marcado **Hex Display**.
-  3. Escribe: `A55A2000010000002D` (18 caracteres, sin espacios: LabVIEW los agrupa solo).
-  4. Debe verse como `A55A 2000 0100 0000 2D`.
-- *La que tenías (`A55A 2001 0100 0000 040F`) tenía 10 bytes y un CRC equivocado: el PIC la rechazaba y nunca empezaba a enviar.*
-- Tu indicador `return count` debe mostrar **9** al correr.
-
-### 2.3 El bucle principal (While Loop) y sus memorias
-
-**[B1] While Loop**: el que ya tienes. Agrándalo bastante hacia la derecha y hacia abajo: va a tener otro bucle adentro.
-
-Ya tienes dos shift registers (el morado del VISA y el amarillo del error). **Agrega cinco más** (clic derecho en el borde → Add Shift Register, cinco veces), con estos valores iniciales conectados **desde afuera, a la flechita ▼ izquierda**:
-
-| Shift register | Constante inicial (afuera) | Cómo hacer la constante |
-|---|---|---|
-| **[SR-buffer]** | texto vacío | Programming → String → Empty String Constant |
-| **[SR-I]** | arreglo vacío de U16 | Programming → Array → Array Constant; mete adentro una Numeric Constant y ponla en **U16**. Déjala vacía (gris) |
-| **[SR-Q]** | arreglo vacío de U16 | igual que el anterior (copia y pega) |
-| **[SR-SEQ]** | arreglo vacío de U8 | igual, pero el número de adentro en **U8** |
-| **[SR-CRCmal]** | `0` (I32) | Numeric Constant, Representation I32 |
-
-### 2.4 Dentro del bucle principal: leer el puerto
-
-**[B2] Property Node «Bytes at Port»**: ya lo tienes. Revisa:
-- `reference` (arriba a la izquierda) ← flechita ▼ del shift register **morado** (VISA).
-- `error in` ← flechita ▼ del shift register **amarillo** (error).
-
-**[B3] Greater?** (`> 0`): ya lo tienes. `x` ← `Bytes at Port`; `y` ← constante `0`.
-
-**[B4] Case Structure**: la que ya tienes. `?` ← salida de [B3].
-- **Página True:** el **VISA Read** que ya tienes:
-  - `VISA resource name` ← salida `reference out` de [B2] (entra por un túnel).
-  - `error in` ← `error out` de [B2].
-  - `byte count` ← `Bytes at Port` de [B2].
-  - Salidas: `VISA resource name out`, `error out` y `read buffer` (el texto leído) → cada una sale por un túnel al borde derecho del Case.
-- **Página False** *(esto es lo que te falta)*: cambia de página con las flechitas ◀ ▶ y conecta:
-  - el túnel de entrada del VISA → directo al túnel de salida del VISA;
-  - el túnel de entrada del error → directo al túnel de salida del error;
-  - el túnel de salida del `read buffer` → clic derecho sobre él (desde adentro) → **Create → Constant** (queda un texto vacío).
-- Revisa que los tres túneles de salida del Case queden **rellenos** ■.
-
-**[B5] Concatenate Strings** (Programming → String → Concatenate Strings). *Pega lo nuevo al final de lo acumulado.*
-- Entrada de arriba ← flechita ▼ de **[SR-buffer]**.
-- Entrada de abajo ← túnel `read buffer` que sale de [B4].
-- La salida de [B5] es el **buffer completo**. Va al bucle de adentro (2.5).
-
-**[B6] Conecta el VISA y el error a sus memorias:**
-- Túnel de salida del VISA de [B4] → flechita ▲ del shift register **morado**.
-- Túnel de salida del error de [B4] → flechita ▲ del shift register **amarillo**.
-
-### 2.5 El bucle de adentro: sacar las tramas
-
-**[D1] While Loop interno**: dibújalo dentro de [B1], a la derecha de [B5]. Hazlo grande.
-
-**[D2] Cambia su condición:** clic derecho sobre la terminal de condición (circulito rojo, abajo a la derecha) → **Continue if True**. Se vuelve una flechita circular. *Ahora el bucle sigue mientras le llegue «verdadero».*
-
-**[D3] Cinco shift registers en [D1]** (clic derecho en el borde → Add Shift Register, cinco veces). Conexiones a sus flechitas ▼ izquierdas:
-
-| Shift register de [D1] | Su ▼ izquierda recibe… |
+| Entrada | Qué conectar |
 |---|---|
-| **[d-buffer]** | la salida de **[B5]** |
-| **[d-I]** | la flechita ▼ de **[SR-I]** |
-| **[d-Q]** | la flechita ▼ de **[SR-Q]** |
-| **[d-SEQ]** | la flechita ▼ de **[SR-SEQ]** |
-| **[d-CRCmal]** | la flechita ▼ de **[SR-CRCmal]** |
+| `VISA resource name` | el terminal `Puerto` (P1) |
+| `baud rate` | constante `115200` |
+| `data bits` | constante `8` |
+| `parity` | clic derecho → Create → Constant → **None** |
+| `stop bits` | clic derecho → Create → Constant → **1.0** |
+| `flow control` | clic derecho → Create → Constant → **None** |
+| `Enable Termination Char` | constante **True** (verde, T) |
+| `termination char` | constante `10` (es `\n`; así cada lectura termina al final de una línea) |
+| `timeout (10sec)` | constante `1000` (1 s: si en 1 s no llega nada, hay error y el VI para) |
 
-Y al revés, al final: la flechita ▲ derecha de cada uno de [D1], **por fuera** de [D1], va a la ▲ derecha del shift register del bucle grande que le corresponde (**[d-buffer] → [SR-buffer]**, **[d-I] → [SR-I]**, y así).
+**B2. VISA Flush I/O Buffer** (Instrument I/O → Serial → VISA Flush I/O Buffer). A la derecha de B1. Conecta `VISA resource name out` de B1 a su `VISA resource name`, y `error out` de B1 a su `error in`. En `mask` crea una constante y elige *Receive buffer*. Sirve para tirar lo que llegó antes de abrir el VI.
 
-**Dentro de [D1]:**
+## PARTE 3. El bucle
 
-**[D4] Search/Split String** (Programming → String → Additional String Functions → Search/Split String). *Busca A5 5A en el buffer.*
-- `string` ← flechita ▼ de **[d-buffer]**.
-- `search string/char` ← clic derecho → Create → Constant. Clic derecho sobre esa constante → **Hex Display** → escribe `A55A`.
-- Salidas que vas a usar: **`match + rest`** (el texto desde el A5 en adelante) y **`offset of match`** (la posición del A5, o −1 si no lo encontró).
+**B3. While Loop.** Dibuja un rectángulo grande a la derecha de B2. Todo lo que sigue va **adentro**.
 
-**[D5] Greater Or Equal To 0?** (Programming → Comparison → Greater Or Equal To 0?)
-- `x` ← `offset of match` de [D4]. *(Verdadero = sí encontró A5 5A.)*
+**B4. VISA Read** (Instrument I/O → Serial → VISA Read).
+- `VISA resource name`: cable morado desde B2 (entra por un túnel en el borde del bucle).
+- `error in`: cable de error desde B2.
+- `byte count`: constante `50` (más largo que cualquier línea; la lectura termina antes, en el `\n`).
+- `read buffer` (salida rosada): la línea, por ejemplo `I:2048,Q:2051` + `\r\n`.
 
-**[D6] String Length** (Programming → String → String Length)
-- `string` ← `match + rest` de [D4].
+**B5. Scan From String** (Programming → String → Scan From String).
+- `input string`: el `read buffer` de B4.
+- `format string`: constante de texto **`I:%d,Q:%d`** (clic derecho en la entrada → Create → Constant y escribe eso).
+- Estira el bloque hacia abajo con el mouse hasta que tenga **dos** salidas `output`. Lo que sobra al final (`\r\n`) no importa.
+- Conecta `output 1` al indicador `I (código)` y `output 2` a `Q (código)`.
+- **No** conectes su `error out` al cable de error principal: una línea cortada daría error y pararía el VI. Ese error va al Case de B7.
 
-**[D7] Greater Or Equal?** (Programming → Comparison → Greater Or Equal?)
-- `x` ← salida de [D6]; `y` ← Create → Constant → `9`. *(Verdadero = hay 9 bytes o más.)*
+**B6. Pasar a voltios.**
+- Dos **Multiply** (Programming → Numeric → Multiply). En cada uno: una entrada desde `output 1` (o `output 2`) y la otra con la constante **`0.000903320`** (3,7 V / 4096).
+- **Bundle** (Programming → Cluster → Bundle), con dos entradas: el voltaje de I arriba y el de Q abajo.
+- La salida de Bundle va a la **Waveform Chart** `I y Q (V)`: dibuja dos curvas.
 
-**[D8] And** (Programming → Boolean → And)
-- `x` ← salida de [D5]; `y` ← salida de [D7].
-- *Verdadero = hay una trama completa.*
-- La salida de [D8] **también** va a la terminal de condición de [D1] (la flechita circular del paso [D2]). *Así el bucle de adentro sigue mientras haya tramas completas y se detiene cuando no.*
+**B7. Contar las líneas malas.**
+- Clic derecho en el borde del bucle → **Add Shift Register**. Afuera, conecta una constante `0` (I32) a la flechita ▼ de la izquierda.
+- **Unbundle By Name** (Programming → Cluster → Unbundle By Name) sobre el `error out` de B5: elige `status` (verde: True si hubo error).
+- **Case Structure**: la entrada **?** va al `status`.
+  - Página **True**: un **Increment** (Programming → Numeric → Increment) entre la flechita ▼ y la ▲.
+  - Página **False**: un cable directo de ▼ a ▲.
+- Conecta lo que sale hacia la ▲ también al indicador `Líneas malas`.
+- Para que la gráfica no reciba ceros en una línea mala, mete B6 en la página **False** del mismo Case (en la **True** no se grafica nada).
 
-**[D9] Case Structure** («¿hay trama completa?»): grande, dentro de [D1].
-- `?` ← salida de [D8].
-- Entran por túneles: `match + rest`, y las flechitas ▼ de [d-buffer], [d-I], [d-Q], [d-SEQ] y [d-CRCmal].
-- Salen por túneles hacia las flechitas ▲ derechas de [d-buffer], [d-I], [d-Q], [d-SEQ] y [d-CRCmal].
+La primera línea casi siempre llega cortada: 1 línea mala al principio es normal.
 
-#### Página **False** de [D9] (no hay trama completa): no se toca nada
+**B8. Condición de paro.**
+- **Unbundle By Name** sobre el `error out` de **B4** (el de VISA Read, no el de Scan From String) → `status`.
+- **Or** (Programming → Boolean → Or): una entrada desde ese `status` y la otra desde el botón `STOP` (P6).
+- La salida del Or va al circulito rojo 🔴 del bucle.
 
-Une con cables rectos cada túnel de entrada con su túnel de salida:
-- ▼[d-buffer] → ▲[d-buffer] *(se deja el buffer igual, para completarlo en la próxima lectura)*
-- ▼[d-I] → ▲[d-I]
-- ▼[d-Q] → ▲[d-Q]
-- ▼[d-SEQ] → ▲[d-SEQ]
-- ▼[d-CRCmal] → ▲[d-CRCmal]
+## PARTE 4. Plano I-Q (opcional)
 
-#### Página **True** de [D9] (hay trama completa)
+1. Dos shift registers más. Afuera, a cada flechita ▼ conecta un arreglo vacío de DBL: clic derecho → Create → Constant sobre la entrada, o Programming → Array → **Array Constant** con un **Numeric Constant** DBL adentro.
+2. En la página **False** del Case de B7: **Build Array** (Programming → Array → Build Array) con dos entradas: arriba la flechita ▼ (el arreglo), abajo el voltaje nuevo. Clic derecho en el bloque → **Concatenate Inputs** (si no, da error de tipos). Uno para I y otro para Q.
+3. Para no guardar puntos sin fin: **Array Subset** (Programming → Array → Array Subset) después de cada Build Array, con `index` = largo − 1000 (usa **Array Size**, **Subtract** y **Max & Min** para que no sea negativo) y `length` = 1000. La salida va a la flechita ▲.
+4. **Bundle** con dos entradas: arreglo de I (arriba = eje X) y arreglo de Q (abajo = eje Y). La salida va al **XY Graph** `Plano I-Q`.
+5. En la página **True**, cable directo de ▼ a ▲ en los dos arreglos (si no, los túneles quedan huecos □).
 
-**[E1] String Subset** (Programming → String → String Subset). *Corta los 9 bytes de la trama.*
-- `string` ← túnel `match + rest`.
-- `offset` ← constante `0`; `length` ← constante `9`.
+## PARTE 5. Cerrar (fuera del bucle)
 
-**[E2] String To Byte Array** (Programming → String → Conversion → String To Byte Array).
-- `string` ← salida de [E1]. *Sale un arreglo de 9 números U8: la trama.*
+**B9. VISA Close** (Instrument I/O → Serial → VISA Close), a la derecha del bucle. Entran el cable morado y el de error que salen del bucle.
 
-**[E3] Array Subset** (Programming → Array → Array Subset). *Los 6 bytes que entran al CRC.*
-- `array` ← salida de [E2]; `index` ← constante `2`; `length` ← constante `6`.
+**B10. Simple Error Handler** (Programming → Dialog & User Interface → Simple Error Handler) después de B9: si algo falló, muestra el mensaje.
 
-**[E4] CRC8.vi** (tu subVI). Para ponerlo: clic derecho → **Select a VI…** → busca `CRC8.vi`.
-- Entrada `bytes` ← salida de [E3]. Salida: `crc`.
+## PARTE 6. Probar
 
-**[E5] Index Array** (Programming → Array → Index Array). *Saca los bytes de uno en uno.*
-- `array` ← salida de [E2].
-- Primer `index` ← constante `2`.
-- **Agrándalo hacia abajo** (pon el mouse en el borde de abajo del bloque y arrastra) hasta que tenga **7 salidas**. Sin conectar más índices, te da los elementos 2, 3, 4, 5, 6, 7 y 8, en ese orden:
+1. En el panel frontal, elige el COM del CP2102 en `Puerto`.
+2. Run (la flecha, Ctrl + R).
+3. Deben moverse las dos curvas. `I (código)` y `Q (código)` cambian todo el tiempo y `Líneas malas` queda en 0 o 1.
+4. STOP para parar (no uses el botón rojo de abortar: deja el COM abierto).
 
-| Salida | Byte | Qué es |
-|---|---|---|
-| 1.ª | 2 | TYPE |
-| 2.ª | 3 | SEQ |
-| 3.ª | 4 | I alto |
-| 4.ª | 5 | I bajo |
-| 5.ª | 6 | Q alto |
-| 6.ª | 7 | Q bajo |
-| 7.ª | 8 | CRC que mandó el PIC |
-
-**[E6] Equal?** (Programming → Comparison → Equal?) *¿El CRC calculado es igual al recibido?*
-- `x` ← `crc` de [E4]; `y` ← 7.ª salida de [E5].
-
-**[E7] Case Structure** («¿CRC bueno?»), dentro de la página True de [D9].
-- `?` ← salida de [E6].
-
-##### Página **True** de [E7] (CRC bueno)
-
-**[F1] Equal?** *¿Es una trama de datos (TYPE = A1)?*
-- `x` ← 1.ª salida de [E5] (TYPE); `y` ← constante `161` (161 es A1), en U8.
-
-**[F2] Case Structure** («¿es DATA_IQ?»).
-- `?` ← salida de [F1].
-
-En la **página True de [F2]** (es de datos):
-- **[G1] Join Numbers** (Programming → Numeric → Data Manipulation → Join Numbers): `hi` ← 3.ª salida de [E5] (I alto); `lo` ← 4.ª salida (I bajo). Sale **I** (U16).
-- **[G2] Join Numbers**: `hi` ← 5.ª salida (Q alto); `lo` ← 6.ª salida (Q bajo). Sale **Q** (U16).
-- **[G3] Build Array** (Programming → Array → Build Array). Agrándalo a 2 entradas. Arriba ← ▼[d-I] (entra por túneles); abajo ← salida de [G1]. *(Agrega I al final de la lista.)* Salida → ▲[d-I].
-- **[G4] Build Array**: arriba ← ▼[d-Q]; abajo ← salida de [G2]. Salida → ▲[d-Q].
-- **[G5] Build Array**: arriba ← ▼[d-SEQ]; abajo ← 2.ª salida de [E5] (SEQ). Salida → ▲[d-SEQ].
-
-En la **página False de [F2]** (no es de datos, por ejemplo un ADC_ACK): une cada lista de entrada con su salida sin tocarla (▼[d-I] → ▲[d-I], igual con Q y SEQ).
-
-Todavía en la **página True de [E7]**:
-- **[F3] String Subset** (borra la trama del buffer): `string` ← túnel `match + rest`; `offset` ← constante `9`; `length` **sin conectar** (así toma hasta el final). Salida → ▲[d-buffer].
-- ▼[d-CRCmal] → ▲[d-CRCmal] directo (no cambia).
-
-##### Página **False** de [E7] (CRC malo)
-
-- **[F4] Increment** (Programming → Numeric → Increment): entrada ← ▼[d-CRCmal]; salida → ▲[d-CRCmal]. *(Cuenta una trama mala.)*
-- **[F5] String Subset**: `string` ← `match + rest`; `offset` ← constante `1`; `length` sin conectar. Salida → ▲[d-buffer]. *(Borra solo el primer byte y vuelve a buscar, igual que hace el PIC.)*
-- ▼[d-I] → ▲[d-I], ▼[d-Q] → ▲[d-Q], ▼[d-SEQ] → ▲[d-SEQ] directo.
-
-**Cómo salen las cosas de la página True de [D9]:** todo lo que sale de los túneles de [E7] (buffer, I, Q, SEQ, CRC malos) va con un cable al túnel de salida de [D9] que le corresponde.
-
-**Antes de seguir:** revisa en **cada página de cada Case** ([D9], [E7] y [F2]) que todos los túneles de salida estén **rellenos** ■. Si alguno está hueco □, falta un cable en alguna página.
-
-### 2.6 Después del bucle de adentro (todavía dentro del bucle grande)
-
-**[H1] Multiply** (Programming → Numeric → Multiply). *Pasa I a voltios.*
-- `x` ← el cable que sale de ▲[d-I] (por fuera de [D1]) y va a ▲[SR-I]: haz clic sobre ese cable y saca una rama hasta [H1]. `y` ← constante `0.000903320` (= 3,7 / 4096).
-
-**[H2] Multiply**: igual, con una rama del cable de Q (el que va de ▲[d-Q] a ▲[SR-Q]).
-
-**[H3] Build Array**: 2 entradas: arriba ← [H1], abajo ← [H2]. *Queda una tabla de 2 filas (I y Q).*
-- Salida → terminal **`Gráfica`**. *(La gráfica dibuja una curva por fila.)*
-
-**[H4] Array Size** (Programming → Array → Array Size)
-- `array` ← otra rama del mismo cable de I que va a ▲[SR-I]. Salida → indicador **`Muestras`**.
-
-**[H5]** Una rama del cable que va de ▲[d-CRCmal] a ▲[SR-CRCmal] → indicador **`CRC malos`**.
-
-**[H6] Greater Or Equal?**: `x` ← salida de [H4]; `y` ← control **`Muestras a capturar`**.
-
-**[H7] Or** (Programming → Boolean → Or): `x` ← botón **`stop`**; `y` ← salida de [H6].
-- Salida → terminal de condición (circulito rojo) de **[B1]**.
-- *Si el `stop` ya estaba conectado directo al circulito, borra ese cable y pásalo por el Or.*
-
-**[H8] Wait (ms) con 10**: el que ya tienes. Déjalo dentro de [B1], suelto.
-
-### 2.7 Después del bucle grande (a la derecha, afuera)
-
-Otra vez en cadena (morado y error):
-
-**[K1] VISA Write** (Instrument I/O → VISA → VISA Write). *Le dice al PIC que pare.*
-- `VISA resource name` ← flechita ▲ del shift register morado (por fuera de [B1]).
-- `error in` ← flechita ▲ del shift register amarillo (por fuera).
-- `write buffer` ← constante de texto con **Hex Display**: escribe `A55A20010000000059` (se ve `A55A 2001 0000 0000 59`).
-
-**[K2] VISA Close** (Instrument I/O → VISA → VISA Close)
-- `VISA resource name` ← salida de [K1]; `error in` ← `error out` de [K1].
-
-**[K3] Simple Error Handler** (Programming → Dialog & User Interface → Simple Error Handler)
-- `error in` ← `error out` de [K2]. *(Si algo falló, te muestra un mensaje.)*
-
-**Guardar el CSV:**
-
-**[K4] Build Array** (3 entradas):
-- arriba ← ▲[SR-SEQ] (por fuera de [B1]);
-- medio ← ▲[SR-I];
-- abajo ← ▲[SR-Q].
-- *Queda una tabla de 3 filas.*
-
-**[K5] Write Delimited Spreadsheet** (Programming → File I/O → Write Delimited Spreadsheet)
-- `file path` ← control **`Archivo CSV`**.
-- `2D data` ← salida de [K4].
-- `format` ← Create → Constant → escribe `%d` (números enteros).
-- `delimiter` ← Create → Constant → escribe `,` (una coma).
-- `transpose?` ← Create → Constant → **T**. *(Así queda en 3 columnas: SEQ, I, Q.)*
-
----
-
-## PARTE 3. Probar
-
-1. **Firmware:** en `main.c` deben estar `MODO_PRUEBA_ADC 0` y `MODO_ECO 0`. Compila y programa el PIC.
-2. **Placa:** JP_TX y JP_RX cerrados; el CP2102 conectado en J5.
-3. **En LabVIEW:** elige el COM en `Puerto COM`, escribe la ruta del CSV y presiona **Run**.
-4. **Qué deberías ver:**
-   - `return count` = 9;
-   - `Muestras` subiendo unas 1000 por segundo;
-   - `CRC malos` en 0;
-   - la gráfica con dos líneas: con las entradas en reposo, cerca de 1,85 V (código ≈ 2048).
-5. A las 10 000 muestras para solo, manda «para» al PIC y guarda el CSV.
-6. **Revisar pérdidas:** abre el CSV en Excel. En la columna SEQ cada número debe ser el anterior + 1 (después de 255 vuelve a 0). Si salta, se perdieron tramas.
-
-## PARTE 4. Si algo falla
-
-| Lo que ves | Qué revisar |
+| Lo que pasa | Qué revisar |
 |---|---|
-| La flecha Run está partida | haz clic en ella: te dice qué bloque falla. Casi siempre es un túnel hueco □ en un Case o un cable sin conectar |
-| `Muestras` no sube | ¿el PIC está en `MODO_PRUEBA_ADC 0`? ¿JP_TX/JP_RX cerrados? ¿`return count` = 9? |
-| `CRC malos` sube mucho | revisa las constantes del CRC8.vi (U8, 128, 7, 1) y que `enable termination char` esté en F |
-| Valores raros (miles) | en [G1]/[G2] se cruzaron `hi` y `lo`: el byte alto va en `hi` |
-| La gráfica se pone lenta | normal pasadas muchas muestras; no afecta la captura |
-| Error de VISA al empezar | otro programa (Arduino IDE, Python) tiene abierto el COM: ciérralo |
+| Error de timeout (−1073807339) | no llega nada: COM equivocado, PIC sin programar, JP_TX abierto |
+| Error al abrir el puerto | otro programa (Arduino IDE, Python) tiene el COM abierto |
+| `Líneas malas` sube sin parar | `termination char` no es 10, `Enable Termination Char` en False o baud distinto de 115200 |
+| Las curvas van lentas o se atrasan | normal en PCs lentas a 500 líneas/s; para mirar, sube `ADC_PARES_POR_LINEA` en `adc_ascii.h`. Para medir SINAD usa `interfaz_micro3.py` |

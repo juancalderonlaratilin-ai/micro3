@@ -1,5 +1,7 @@
 # Guía: probar la UART con el SNAP y el PIC
 
+> **Histórico (2026-11-04):** esta guía es de la prueba de eco del 2026-10-19 (pasó). El `main.c` de eco y `herramientas/prueba_uart.py` ya no están: hoy el PIC solo manda líneas `I:xxxx,Q:xxxx\r\n`. Para probar el enlace actual: `docs/receptor_python_y_serial_plotter.md` y el Módulo 2 de `docs/protocolos_prueba.md`.
+
 Proyecto Micro 3 · 2026-10-19 · Para después de que Claude Code termine T-03 y compile sin errores.
 
 > **Qué se prueba:** que el PIC devuelva por la UART cada byte que le llega (eco), sin perder ni cambiar ninguno. Corresponde a las pruebas 1.5, 1.6 y 1.7 de `docs/protocolos_prueba.md`.

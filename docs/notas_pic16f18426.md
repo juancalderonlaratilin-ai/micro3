@@ -122,6 +122,7 @@ Tabla de `OSCFRQ` (DS p.139): `110`→32 MHz · `101`→16 MHz · `100`→12 MHz
 | **Salida TX1/CK1** | se asigna con `RxyPPS = 0b001111` = **`0x0F`**. Ejemplo: `RC4PPS = 0x0F` | DS p.233 (Tabla 16-3) |
 | Salida PWM6 | `RxyPPS = 0x0D` | DS p.233 |
 | Salida PWM7 | `RxyPPS = 0x0E` | DS p.233 |
+| Salida TMR0 (`TMR0_out`) | `RxyPPS = 0x17` (`0b010111`). Ejemplo: `RC2PPS = 0x17` | Comprobado en el código de MCC de dos proyectos del PIC16F18446 (mismo datasheet DS40001985): `RB5PPS = 0x17; //RB5->TMR0:TMR0`; la familia PIC16F18455/56 usa el mismo código (Tabla 16-3). **Falta confirmarlo en DS p.233** y que `RC2PPS` exista en `pic16f18426.h` (si no compila, el nombre está mal). `TMR0_out` cambia de nivel en cada período del Timer0 tras el postscaler [por confirmar en DS cap. 18] |
 | Salidas CCP1–CCP4 | `0x09`, `0x0A`, `0x0B`, `0x0C` | DS p.233 |
 | Valores de entrada (`xxxPPS`) | RC5 = `0x15`, RC4 = `0x14`, RC3 = `0x13`, RC2 = `0x12`, RC1 = `0x11`, RC0 = `0x10`, RA5 = `0x05`, RA4 = `0x04`, RA2 = `0x02`, RA1 = `0x01`, RA0 = `0x00` | DS p.232 (Tabla 16-2) |
 | Estado tras un reset | `PPSLOCKED = 0` (desbloqueado). Tras un POR, las selecciones vuelven a su valor por defecto | DS p.234–235 |

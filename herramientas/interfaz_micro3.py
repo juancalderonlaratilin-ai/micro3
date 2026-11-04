@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Interfaz de mediciones para Micro 3 (PIC16F18426, tramas de 9 bytes).
+"""Interfaz de mediciones para Micro 3 (PIC16F18426, envío en texto ASCII).
 
-Recibe las tramas DATA_IQ por la UART (A5 5A | TYPE | SEQ | I | Q | CRC-8), muestra I y Q
-en vivo y calcula las mediciones del ADC:
+Recibe por la UART las líneas "I:2048,Q:2051\r\n" que manda el PIC (adc_ascii.c, 500 por
+segundo), muestra I y Q en vivo y calcula las mediciones del ADC:
 
   * Senoidal: SINAD, ENOB, SNR, THD, SFDR, frecuencia y amplitud (método de
     docs/especificacion_adc.md §6: ventana de Kaiser β = 14, fundamental ±6 bins; además
@@ -14,12 +14,11 @@ en vivo y calcula las mediciones del ADC:
 
 Requiere:  pip install pyserial numpy matplotlib
 Uso:       python interfaz_micro3.py
-Debe estar en la misma carpeta que receptor_micro3.py (usa su decodificador).
-El firmware debe estar con MODO_PRUEBA_ADC = 0 y MODO_ECO = 0.
 """
 import collections
 import csv
 import math
+import re
 import sys
 import threading
 import time
@@ -31,9 +30,6 @@ except ImportError:
           "y deja marcada la opción «tcl/tk and IDLE».\n")
     input("Presiona Enter para cerrar...")
     sys.exit(1)
-
-import os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # para hallar receptor_micro3.py
 
 
 def _falta(texto):
@@ -65,14 +61,9 @@ except ImportError as e:
            "Abre cmd y escribe:\n    pip install pyserial numpy matplotlib\n"
            "(o:  py -m pip install pyserial numpy matplotlib)")
 
-try:
-    from receptor_micro3 import (Decodificador, crc8, SYNC, LARGO, TIPO_DATA_IQ, TIPO_ADC_ACK,
-                                 CMD_ENCENDER, CMD_APAGAR)
-except ImportError:
-    _falta("No se encontró receptor_micro3.py.\n\n"
-           "Debe estar en la misma carpeta que interfaz_micro3.py (herramientas).")
-
-FS = 1000.0                  # muestras por segundo (Timer0 a 1 ms)
+FS_ADC = 1000.0              # el ADC muestrea a 1 kHz (Timer0 a 1 ms)
+FS = 500.0                   # líneas por segundo que manda el PIC (1 de cada 2 pares)
+BAUD = 115200
 N_BITS = 12
 VREF = 3.7
 LSB = VREF / 2 ** N_BITS     # 0,9033 mV
@@ -199,33 +190,77 @@ def analizar_periodo(cuentas):
     }
 
 
+# ============================================================ decodificador de líneas ASCII
+
+LINEA_ASCII = re.compile(rb"I:(\d{1,5}),Q:(\d{1,5})\r?\n")
+
+
+class DecoAscii:
+    """Junta los bytes que llegan y saca de cada línea completa "I:2048,Q:2051\r\n" los
+    códigos de I y Q (0 a 4095). Una línea que llega cortada o con otra forma no se usa y se
+    cuenta en lineas_malas (es la única revisión que hay: el texto no lleva suma de verificación)."""
+
+    def __init__(self):
+        self.texto = bytearray()
+        self.i, self.q = [], []
+        self.lineas_malas = 0       # líneas que no tienen la forma I:xxxx,Q:xxxx
+        self.t_primera = None       # hora de la primera muestra (para medir muestras/s)
+
+    def alimentar(self, datos):
+        """Agrega bytes y devuelve la lista de (i, q) nuevos."""
+        self.texto += datos
+        nuevos = []
+        fin = self.texto.rfind(b"\n")
+        if fin < 0:
+            if len(self.texto) > 4096:        # mucho sin un salto de línea: es basura
+                self.lineas_malas += 1
+                self.texto.clear()
+            return nuevos
+        bloque = bytes(self.texto[:fin + 1])
+        del self.texto[:fin + 1]
+        for m in LINEA_ASCII.finditer(bloque):
+            i, q = int(m.group(1)), int(m.group(2))
+            self.i.append(i)
+            self.q.append(q)
+            nuevos.append((i, q))
+        total = bloque.count(b"\n")
+        self.lineas_malas += max(0, total - len(nuevos) - bloque.count(b"Micro3"))
+        if nuevos and self.t_primera is None:
+            self.t_primera = time.perf_counter()
+        return nuevos
+
+
+def fs_desde_tasa(tasa):
+    """El PIC muestrea a 1 kHz y manda 1 de cada k pares (k = ADC_PARES_POR_LINEA en
+    adc_ascii.h; con 2 son 500 líneas/s). Se elige el 1000/k más cercano a lo medido."""
+    if tasa <= 0:
+        return FS
+    k = FS_ADC / tasa
+    for redondo in (1, 2, 3, 4, 5, 10, 20, 25, 50, 100, 200, 250):
+        if abs(k - redondo) <= 0.04 * redondo:   # a tasas bajas la medida varía unos %
+            return FS_ADC / redondo
+    return FS_ADC / max(1, round(k))
+
+
 # ============================================================ simulador (prueba sin PIC)
 
 class Simulador:
-    """Imita al PIC: responde ADC_STREAM y manda DATA_IQ a 1 kHz.
+    """Imita al PIC: muestrea a 1 kHz y manda una línea "I:...,Q:...\r\n" cada `cada` pares
+    (2 = 500 líneas/s, como adc_ascii.c).
     modo "senoidal": I y Q senoidales de 1,7 V de amplitud, ruido de 0,5 LSB rms y un 3.er
     armónico de −75 dBc (el SINAD esperado es ≈ 66 dB).  modo "continua": 1,85 V con ruido."""
 
-    def __init__(self, modo="senoidal", f=20.0, amp_V=1.7, ruido_LSB=0.5):
+    def __init__(self, modo="senoidal", f=20.0, amp_V=1.7, ruido_LSB=0.5, cada=2):
         self.modo, self.f, self.amp, self.ruido = modo, f, amp_V / LSB, ruido_LSB
+        self.cada = cada
         self.salida = bytearray(b"Micro3 listo\r\n")
-        self.encendido = False
-        self.seq = 0
         self.n = 0
         self.t0 = time.perf_counter()
         self.lock = threading.Lock()
         self.rng = np.random.default_rng(1)
 
-    def _trama(self, tipo, seq, payload):
-        cuerpo = bytes([tipo, seq]) + bytes(payload)
-        return SYNC + cuerpo + bytes([crc8(cuerpo)])
-
     def write(self, datos):
-        if len(datos) == LARGO and datos[:2] == SYNC and datos[2] == 0x20:
-            self.encendido = datos[4] != 0
-            with self.lock:
-                self.salida += self._trama(TIPO_ADC_ACK, datos[3], [int(self.encendido), 0, 0, 0])
-        return len(datos)
+        return len(datos)            # el PIC no recibe comandos
 
     def _muestra(self, t, fase):
         if self.modo == "continua":
@@ -237,14 +272,12 @@ class Simulador:
         return int(min(max(round(v), 0), 4095))
 
     def _generar(self):
-        if not self.encendido:
-            return
-        objetivo = int((time.perf_counter() - self.t0) * FS)
+        objetivo = int((time.perf_counter() - self.t0) * FS_ADC)
         while self.n < objetivo:
-            t = self.n / FS
-            i, q = self._muestra(t, 0.0), self._muestra(t, math.pi / 2)
-            self.salida += self._trama(TIPO_DATA_IQ, self.seq, [i >> 8, i & 0xFF, q >> 8, q & 0xFF])
-            self.seq = (self.seq + 1) & 0xFF
+            if self.n % self.cada == 0:
+                t = self.n / FS_ADC
+                i, q = self._muestra(t, 0.0), self._muestra(t, math.pi / 2)
+                self.salida += f"I:{i},Q:{q}\r\n".encode()
             self.n += 1
 
     @property
@@ -278,13 +311,14 @@ PUERTO_SIM_DC = "SIMULADOR (continua 1,85 V)"
 class App:
     def __init__(self, raiz):
         self.raiz = raiz
-        raiz.title("Micro 3 — Receptor y mediciones del ADC (trama de 9 bytes)")
+        raiz.title("Micro 3 — Receptor y mediciones del ADC (líneas ASCII I:…,Q:…)")
         raiz.geometry("1350x820")
         self.deco = None
         self.puerto = None
         self.hilo = None
         self.parar = threading.Event()
         self.t_inicio = None
+        self.fs = FS
         self.ultimo = None          # último resultado de análisis
         self.ultimo_tipo = None
 
@@ -383,7 +417,7 @@ class App:
         ax.set_ylim(0, VREF)
         ax.grid(True)
         ax.legend(loc="upper right")
-        ax.set_title("Últimos 2 s (1000 muestras/s)")
+        ax.set_title("Últimos 2 s (500 muestras/s)")
         for nombre in ["Espectro", "Histograma", "Plano I-Q"]:
             fig, ax, lienzo = self.figs[nombre]
             ax.text(0.5, 0.5, "Presiona «Analizar ahora»", ha="center", va="center", transform=ax.transAxes)
@@ -413,17 +447,17 @@ class App:
                 self.puerto = Simulador("continua")
             else:
                 import serial
-                self.puerto = serial.Serial(nombre, 115200, bytesize=8, parity="N", stopbits=1, timeout=0.05)
+                self.puerto = serial.Serial(nombre, BAUD, bytesize=8, parity="N", stopbits=1, timeout=0.05)
         except Exception as e:
             self.puerto = None
             messagebox.showerror("No se pudo abrir el puerto",
                                  f"{e}\n\n¿Otro programa (LabVIEW, Arduino IDE) tiene abierto el COM?")
             return
-        self.deco = Decodificador()
+        self.deco = DecoAscii()
+        self.fs = FS
         self.parar.clear()
         time.sleep(0.1)
         self.puerto.reset_input_buffer()
-        self.puerto.write(CMD_ENCENDER)
         self.t_inicio = time.perf_counter()
         self.hilo = threading.Thread(target=self._leer, daemon=True)
         self.hilo.start()
@@ -446,8 +480,6 @@ class App:
         if self.hilo:
             self.hilo.join(timeout=1)
         try:
-            self.puerto.write(CMD_APAGAR)
-            time.sleep(0.05)
             self.puerto.close()
         except Exception:
             pass
@@ -460,28 +492,59 @@ class App:
         d = self.deco
         if d is not None:
             n = len(d.i)
-            dur = time.perf_counter() - self.t_inicio if self.t_inicio else 0
-            ack = {None: "esperando ADC_ACK…", True: "envío encendido", False: "envío apagado"}[d.envio_encendido]
+            ahora = time.perf_counter()
+            dur = ahora - self.t_inicio if self.t_inicio else 0
             aviso = ""
-            if d.envio_encendido is None and dur > 1.5:
-                aviso = "\n⚠ No llegó el ADC_ACK: revisa MODO_PRUEBA_ADC = 0,\n   JP_TX/JP_RX y el COM."
-            self.var_estado.set(
-                f"{ack}\nmuestras: {n}   ({n / dur if dur > 0 else 0:.0f} /s)\n"
-                f"CRC malos: {d.crc_malos}   perdidas (SEQ): {d.perdidas}"
-                + (f"\nERROR del PIC: {dict(d.errores_pic)}" if d.errores_pic else "") + aviso)
+            if n == 0 and dur > 1.5:
+                aviso = ("\n⚠ No llega nada: revisa el COM, JP_TX/JP_RX\n"
+                         "   y que el PIC esté programado.")
+            # muestras/s medidas desde la primera muestra
+            dt = ahora - d.t_primera if d.t_primera else 0
+            tasa = (n - 1) / dt if dt > 0.5 and n > 1 else 0
+            if n > 50 and dt > 2:
+                self.fs = fs_desde_tasa(tasa)
+                if self.fs < 100:
+                    aviso += (f"\n⚠ Solo {self.fs:.0f} líneas/s: para SINAD pon\n"
+                              "   ADC_PARES_POR_LINEA 2 en adc_ascii.h\n"
+                              "   (500 líneas/s) y vuelve a programar.")
+            linea_cod = ""
             if n:
-                k = min(n, 2000)
+                ui, uq = d.i[-1], d.q[-1]
+                m = min(n, max(int(self.fs), 50))
+                bi, bq = d.i[-m:], d.q[-m:]
+                linea_cod = (f"\núltimo  I = {ui} ({ui * LSB:.3f} V)   Q = {uq} ({uq * LSB:.3f} V)"
+                             f"\nmín/máx I {min(bi)}…{max(bi)}   Q {min(bq)}…{max(bq)}")
+                if max(max(bi), max(bq)) > 4095:
+                    aviso += ("\n⚠ Llegan códigos > 4095: revisa que el ADC\n"
+                              "   esté justificado a la derecha (ADFM = 1).")
+                for nom, b in (("I", bi), ("Q", bq)):
+                    if min(b) >= 4070:
+                        aviso += (f"\n⚠ {nom} pegado a 4095 (3,7 V = VCC): el pin\n"
+                                  "   está en VDD. Mide el pin con el multímetro.")
+                    elif max(b) <= 25:
+                        aviso += (f"\n⚠ {nom} ≈ 0 V: no llega señal al pin.\n"
+                                  "   Revisa J2/J7, JP_IN y JP_ADC.")
+            estado = "recibiendo" if n else "esperando líneas I:…,Q:…"
+            self.var_estado.set(
+                f"{estado}\nmuestras: {n}   ({tasa:.0f} /s → fs = {self.fs:.0f} Hz)\n"
+                f"líneas malas: {d.lineas_malas}" + linea_cod + aviso)
+            if n:
+                k = min(n, int(2 * self.fs))
                 iv = np.asarray(d.i[-k:], float) * LSB
                 qv = np.asarray(d.q[-k:], float) * LSB
-                t = np.arange(n - k, n) / FS
+                t = np.arange(n - k, n) / self.fs
                 self.linea_i.set_data(t, iv)
                 self.linea_q.set_data(t, qv)
                 fig, ax, lienzo = self.figs["Señal en vivo"]
                 ax.set_xlim(t[0], t[0] + 2.0)
-                if self.var_tipo.get() == "periodo":
-                    ax.set_ylim(auto=True)
-                    ax.relim()
-                    ax.autoscale_view(scalex=False)
+                ax.set_title(f"Últimos 2 s ({self.fs:.0f} muestras/s)")
+                lo = min(iv.min(), qv.min())
+                hi = max(iv.max(), qv.max())
+                if self.var_tipo.get() == "periodo" or lo < -0.01 or hi > VREF + 0.01:
+                    margen = max(0.05 * (hi - lo), 0.01)
+                    ax.set_ylim(lo - margen, hi + margen)
+                else:
+                    ax.set_ylim(-0.05, VREF + 0.05)
                 lienzo.draw_idle()
             if self.var_auto.get():
                 self._tick_auto += 1
@@ -497,7 +560,7 @@ class App:
         n = int(self.cb_n.get())
         datos = self.deco.i if self.var_canal.get() == "I" else self.deco.q
         if len(datos) < n:
-            return None, f"Faltan muestras: hay {len(datos)} de {n} ({(n - len(datos)) / FS:.1f} s más)."
+            return None, f"Faltan muestras: hay {len(datos)} de {n} ({(n - len(datos)) / self.fs:.1f} s más)."
         return np.asarray(datos[-n:], dtype=float), None
 
     def analizar(self, silencioso=False):
@@ -511,7 +574,7 @@ class App:
         try:
             if tipo == "senoidal":
                 f_txt = self.en_f.get().strip().replace(",", ".")
-                r = analizar_senoidal(x, f_in=float(f_txt) if f_txt else None)
+                r = analizar_senoidal(x, fs=self.fs, f_in=float(f_txt) if f_txt else None)
                 self._mostrar_senoidal(r, canal)
             elif tipo == "continua":
                 r = analizar_continua(x)
@@ -545,7 +608,7 @@ class App:
             ("\nIdeal 12 bits: 74,0 dB. Requisito: > 60 dB\n(ENOB > 9,67; ruido+dist. < 1,31 mV rms).\n", None),
         ]
         if r["pocos_ciclos"]:
-            lineas.append(("\n⚠ Muy pocos ciclos en la captura: la fundamental\n   se mezcla con la continua. Usa más muestras\n   o una frecuencia mayor (≥ 4 Hz con 4096).\n", "mal"))
+            lineas.append(("\n⚠ Muy pocos ciclos en la captura: la fundamental\n   se mezcla con la continua. Usa más muestras\n   o una frecuencia mayor (≥ 2 Hz con 4096 a 500 Hz).\n", "mal"))
         if r["recorte"]:
             lineas.append(("\n⚠ La señal toca 0 o 4095: hay RECORTE.\n   Baja la amplitud del generador.\n", "mal"))
         if r["frecuencia_Hz"] < 1.0:
@@ -555,7 +618,7 @@ class App:
         fig, ax, lienzo = self.figs["Espectro"]
         ax.clear()
         esp = r["_espectro"]
-        f = np.arange(len(esp)) * FS / r["muestras"]
+        f = np.arange(len(esp)) * self.fs / r["muestras"]
         dbfs = 10 * np.log10(np.maximum(esp, 1e-30) / r["_p_fs"])
         ax.plot(f, dbfs, lw=0.7, color="#1f4e79")
         lo, hi = r["_banda"]
@@ -564,7 +627,7 @@ class App:
             ax.plot(f[kh], dbfs[kh], "v", color="#c62828")
             ax.annotate(f"{h}", (f[kh], dbfs[kh]), textcoords="offset points", xytext=(0, 6),
                         ha="center", fontsize=8, color="#c62828")
-        ax.set_xlim(0, FS / 2)
+        ax.set_xlim(0, self.fs / 2)
         ax.set_ylim(max(dbfs.min(), -160) - 5, 5)
         ax.set_xlabel("frecuencia (Hz)")
         ax.set_ylabel("dBFS (0 dB = senoidal a escala completa)")
@@ -672,9 +735,9 @@ class App:
             return
         with open(ruta, "w", newline="") as f:
             w = csv.writer(f)
-            w.writerow(["seq", "i", "q", "i_V", "q_V"])
-            for s, i, q in zip(self.deco.seq, self.deco.i, self.deco.q):
-                w.writerow([s, i, q, f"{i * LSB:.5f}", f"{q * LSB:.5f}"])
+            w.writerow(["n", "t_s", "i", "q", "i_V", "q_V"])
+            for k, (i, q) in enumerate(zip(self.deco.i, self.deco.q)):
+                w.writerow([k, f"{k / self.fs:.4f}", i, q, f"{i * LSB:.5f}", f"{q * LSB:.5f}"])
         messagebox.showinfo("Guardado", f"{len(self.deco.i)} muestras en\n{ruta}")
 
     def guardar_reporte(self):
@@ -688,6 +751,7 @@ class App:
         with open(ruta, "w", encoding="utf-8") as f:
             f.write(f"Micro 3 — medición {self.ultimo_tipo}, canal {self.var_canal.get()}, "
                     f"{time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+            f.write(f"fs = {self.fs:.0f} muestras/s (líneas ASCII)\n")
             f.write(self.txt.get("1.0", tk.END))
             f.write("\nValores numéricos:\n")
             for k, v in self.ultimo.items():
@@ -700,8 +764,8 @@ class App:
     def borrar(self):
         if self.deco:
             d = self.deco
-            d.seq.clear(); d.i.clear(); d.q.clear()
-            d.crc_malos = 0; d.perdidas = 0; d.seq_anterior = None
+            d.i.clear(); d.q.clear()
+            d.lineas_malas = 0; d.t_primera = None
             self.t_inicio = time.perf_counter()
 
     def cerrar(self):

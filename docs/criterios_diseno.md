@@ -2,7 +2,7 @@
 
 Proyecto Micro 3 · Enlace UART PC ↔ PIC (Fase 1) · Fecha: 2026-10-16 · Actualizado: 2026-10-30 (ADC, §11)
 
-> **Para qué sirve:** explicar **por qué** se escogió cada valor (reloj, baud, formato, pines, niveles, buffers, protocolo), qué alternativas se descartaron y qué falta confirmar. El detalle técnico y las páginas del datasheet están en `especificacion_diseno_uart.md` y `notas_pic16f18426.md`. Las pruebas están en `protocolos_prueba.md`.
+> **Para qué sirve:** explicar **por qué** se escogió cada valor (reloj, baud, formato, pines, niveles, buffers, formato de envío), qué alternativas se descartaron y qué falta confirmar. El detalle técnico y las páginas del datasheet están en `especificacion_diseno_uart.md` y `notas_pic16f18426.md`. Las pruebas están en `protocolos_prueba.md`.
 >
 > **Etiquetas:** **[VERIFICADO]** = sale de un documento de `docs/` o de un cálculo comprobado. **[PROPUESTA]** = decisión de diseño por confirmar con el profesor.
 
@@ -17,7 +17,7 @@ Proyecto Micro 3 · Enlace UART PC ↔ PIC (Fase 1) · Fecha: 2026-10-16 · Actu
 | 3 | Reloj | HFINTOSC interno a **16 MHz**, sin cristal | [PROPUESTA] |
 | 4 | Baud rate | **115200** (`SP1BRG = 34`, error −0,79 %) | [PROPUESTA] |
 | 5 | Formato de byte | **8N1** (8 datos, sin paridad, 1 parada) | [PROPUESTA] |
-| 6 | Protocolo | **Binario**, tramas fijas de 9 bytes con CRC-8 | [PROPUESTA] |
+| 6 | Formato de envío | **Texto ASCII**: una línea `I:xxxx,Q:xxxx\r\n` cada 2 pares = 500 líneas/s. El PIC no recibe comandos | decisión de la persona (2026-11-04) |
 | 7 | Buffers | Circulares (cabeza y cola): RX de 32 bytes, TX de 64 bytes. Motivos en §6.1 | [PROPUESTA] |
 | 8 | Interrupciones | RX siempre activa. TX solo mientras haya datos. Una sola ISR | [VERIFICADO] |
 | 9 | Pines UART | TX = RC4 (pin 6), RX = RC5 (pin 5) | [PROPUESTA] |
@@ -28,7 +28,7 @@ Proyecto Micro 3 · Enlace UART PC ↔ PIC (Fase 1) · Fecha: 2026-10-16 · Actu
 | 14 | Visualización I vs Q | En el PC (LabVIEW o Python), por UART | decidido |
 | 15 | Referencia del ADC (Fase 2) | VDD = 3,7 V (`ADREF = 0x00`) | en el código; falta confirmar con el profesor |
 | 16 | Muestreo del ADC | 1 kHz, disparado por Timer0 (hardware); I y Q convertidos en ráfaga dentro de 1 ms | profesor; código T-09 sin probar. Motivos en §11 |
-| 17 | Promedio del ADC | **ninguno**: una muestra por par (1000 pares/s hacia el PC) | decisión de la persona (2026-11-03); reemplaza D-1 |
+| 17 | Promedio del ADC | **ninguno**: una muestra por par (el PC recibe 1 de cada 2: 500 pares/s) | decisión de la persona (2026-11-03); reemplaza D-1 |
 | 18 | Canales del ADC | I = RC0 y Q = RC1, un solo ADC multiplexado | decidido |
 | 19 | **SINAD del ADC** | **> 60 dB** (ENOB > 9,67 bits) | requisito de la persona (2026-10-30) |
 
@@ -76,14 +76,14 @@ Proyecto Micro 3 · Enlace UART PC ↔ PIC (Fase 1) · Fecha: 2026-10-16 · Actu
 
 **Criterios para escoger 115200**
 
-| Baud | µs por byte | Bytes/s | Uso de la línea con 9000 B/s |
+| Baud | µs por byte | Bytes/s | Uso de la línea con 7500 B/s |
 |---|---|---|---|
-| 9600 | 1041,7 | 960 | **938 %: no cabe** |
-| 19200 | 520,8 | 1920 | **469 %: no cabe** |
-| 57600 | 173,6 | 5760 | **156 %: no cabe** |
-| **115200** | **86,8** | **11 520** | **78 %** |
+| 9600 | 1041,7 | 960 | **781 %: no cabe** |
+| 19200 | 520,8 | 1920 | **391 %: no cabe** |
+| 57600 | 173,6 | 5760 | **130 %: no cabe** |
+| **115200** | **86,8** | **11 520** | **65 %** |
 
-- 9000 B/s = 1000 muestras/s × 9 bytes por trama (sin promedio desde el 2026-11-03; con el promedio de 5 eran 1800 B/s y 16 %). 115200 es el único baud estándar de la tabla en que cabe.
+- 7500 B/s = 500 líneas/s × 15 bytes (`I:4095,Q:4095\r\n`). 115200 es el único baud estándar de la tabla en que cabe. Ni a 115200 caben 1000 líneas/s (15 000 B/s = 130 %): por eso se manda 1 de cada 2 pares (`docs/especificacion_protocolo.md` §2).
 - 115200 es un baud **estándar**: lo aceptan todas las terminales y adaptadores. Un valor raro (como los 125 000 que da el código MCC de clase) solo lo aceptan algunos.
 - A 115200 la ISR tiene 86,8 µs (≈347 ciclos) por byte. Sobra para una ISR corta.
 - **Plazo de RX:** el receptor tiene solo 2 bytes de FIFO. Si llega completo un tercer byte sin que se haya leído `RC1REG` hay overrun. A 115200 son unos 174 µs.
@@ -99,25 +99,24 @@ reposo ‾‾‾|START|D0|D1|D2|D3|D4|D5|D6|D7|STOP|‾‾‾ reposo
 
 | Elemento | Escogido | Por qué |
 |---|---|---|
-| Bits de datos | 8 | El protocolo es binario y necesita el byte completo |
-| Paridad | ninguna | Detecta solo errores de 1 bit y cuesta 10 % de la línea. Con el CRC-8 de la trama se detecta mucho mejor |
+| Bits de datos | 8 | Es lo estándar; el texto ASCII usaría 7, pero todas las terminales y LabVIEW esperan 8 |
+| Paridad | ninguna | Detecta solo errores de 1 bit y cuesta 10 % de la línea, que va al 65 %. Una línea dañada casi siempre pierde la forma `I:número,Q:número` y el PC la descarta |
 | Bits de parada | 1 | Suficiente. Con 2 se da más tiempo a un receptor lento, aquí no hace falta |
 
 ---
 
-## 5. Protocolo
+## 5. Formato de envío (texto ASCII)
 
 | Decisión | Valor | Por qué |
 |---|---|---|
-| Representación | Binario, no ASCII | Lo pidió el profesor: el ASCII es pesado para el procesador (convertir números a texto) |
-| Longitud | Tramas fijas de 9 bytes | Más simple de procesar que longitud variable |
-| Formato | `A5 5A`, `TYPE`, `SEQ`, `PAYLOAD` (4 bytes), `CRC8` | Dos bytes de cabecera para resincronizar. `SEQ` permite detectar pérdidas |
-| Datos I y Q | 2 bytes por canal, 12 bits cada uno | I + Q = 4 bytes = el campo `PAYLOAD` |
-| Verificación | CRC-8 (polinomio `0x07`) sobre los bytes 2 a 7 | Detecta errores y corrupción de bytes |
-| Duración de una trama | 9 × 86,8 µs = 781 µs | Con 1000 muestras/s (sin promedio): 78,1 % de la línea |
-| Etapas | 1a: eco crudo. 1b: ping/pong con CRC | Se prueba primero el canal físico y luego la lógica |
+| Representación | Texto ASCII | Decisión de la persona (2026-11-04): se lee directo en una terminal, en el Serial Plotter y en LabVIEW con *VISA Read* + *Scan From String*. El receptor de la trama binaria en LabVIEW resultó muy largo. Es lo que sugiere el enunciado |
+| Línea | `I:xxxx,Q:xxxx\r\n`, códigos de 0 a 4095 en decimal | `nombre:valor` es lo que entiende el Serial Plotter; `\n` permite leer línea por línea |
+| Longitud | hasta 15 bytes (15 con 4 cifras en los dos canales) | El fin de línea marca dónde termina; no hace falta largo fijo |
+| Líneas por segundo | 500 (1 de cada 2 pares, `ADC_PARES_POR_LINEA` = 2) | Una línea tarda 1,31 ms: no cabe una por cada par de 1 ms. Con 500/s la línea va al 65,6 % |
+| Verificación | Solo la forma de la línea | No hay suma de verificación ni número de secuencia; con 8N1 sin paridad, un byte dañado casi siempre rompe la forma |
+| Sentido | Solo PIC → PC | El PIC empieza a mandar al encender; no hay comandos |
 
-**Alternativas que quedan abiertas:** XOR en lugar de CRC-8 (más simple, detecta menos), y la lista final de tipos de trama.
+**Lo que se pierde frente a una trama binaria:** fs = 500 Hz en el PC en vez de 1000, ninguna detección de líneas perdidas y ningún comando del PC al PIC (el control del PWM, T-07, queda por replantear). Detalle: `docs/especificacion_protocolo.md`.
 
 ---
 
@@ -143,24 +142,24 @@ reposo ‾‾‾|START|D0|D1|D2|D3|D4|D5|D6|D7|STOP|‾‾‾ reposo
 | Dato | Valor |
 |---|---|
 | Tiempo por byte | 86,8 µs |
-| Trama (9 bytes) | 781 µs |
+| Línea `I:4095,Q:4095\r\n` (15 bytes) | 1,3 ms |
 | Capacidad útil de un buffer de N bytes | N − 1 (se considera lleno cuando `head + 1 == tail`, sin contador extra) |
 
-| Buffer | Tamaño | Capacidad útil | Tramas de 9 B que caben | Tiempo de línea que cubre |
+| Buffer | Tamaño | Capacidad útil | Líneas de 15 B que caben | Tiempo de línea que cubre |
 |---|---|---|---|---|
 | MCC de clase (RX y TX) | 8 | 7 | 0 | 0,6 ms |
-| **RX** | **32** | 31 | 3 | 2,7 ms |
-| **TX** | **64** | 63 | 7 | 5,5 ms |
+| **RX** | **32** | 31 | — (hoy no se usa) | 2,7 ms |
+| **TX** | **64** | 63 | 4 | 5,5 ms |
 
 **Por qué 32 en RX**
-- El PC solo manda órdenes cortas (una trama de 9 bytes, o pocas seguidas). Casi siempre el buffer está vacío.
-- Lo que hay que cubrir es el tiempo que el programa principal pueda tardar en volver a `parser_task()`. Con 31 bytes útiles son 2,7 ms de margen. Con los 8 bytes del MCC (7 útiles) serían 0,6 ms, menos que una sola trama (0,78 ms): cualquier tarea un poco larga en `main` perdería bytes.
-- Aquí el buffer es el segundo escalón: el hardware solo tiene una FIFO de 2 bytes, y la ISR debe vaciarla en menos de unos 174 µs (ver la especificación).
+- Hoy el PIC no recibe comandos: el buffer de RX solo se llena si el PC manda algo, y nadie lo lee. Se deja el tamaño por si se agregan comandos de texto (T-07).
+- Si se usa, lo que hay que cubrir es el tiempo que el programa principal pueda tardar en volver a leer. Con 31 bytes útiles son 2,7 ms de margen.
+- Aquí el buffer es el segundo escalón: el hardware solo tiene una FIFO de 2 bytes, y la ISR debe vaciarla en menos de unos 174 µs.
 
 **Por qué 64 en TX**
-- El PIC es el que más habla. En la Fase 2 son 9 bytes por muestra, a 1000 muestras por segundo (9000 B/s, el 78 % de la línea; sin promedio desde el 2026-11-03). Entre muestras pasa 1 ms y una trama tarda 0,78 ms en salir.
-- Una respuesta (por ejemplo PONG) puede coincidir con tramas de datos. 63 bytes útiles son 7 tramas completas: aguanta ráfagas de varias tramas encoladas de golpe sin devolver `false`.
-- Vaciar el buffer completo toma 5,5 ms de línea. Pero como siguen entrando 9 B por milisegundo y salen 11,5, solo se descuentan ≈ 2,5 B/ms: si una ráfaga lo llena, tarda ≈ 25 ms en volver a vaciarse [CÁLCULO]. Mientras tanto una respuesta (PONG, ADC_ACK) puede no caber.
+- El PIC es el que más habla: 15 bytes cada 2 ms (7500 B/s, el 65,6 % de la línea). Una línea tarda 1,31 ms en salir, así que al llegar la siguiente el buffer ya está vacío.
+- 63 bytes útiles son 4 líneas completas: aguanta que `main` se atrase varias líneas sin que `tx_string` devuelva `false`.
+- Si una ráfaga lo llenara, entran 7,5 B/ms y salen 11,4, así que se vacía a ≈ 3,9 B/ms: ≈ 16 ms [CÁLCULO].
 
 **Por qué potencia de 2**
 - El índice se envuelve con `idx = (idx + 1) & (N - 1)`: una operación. Con un tamaño cualquiera habría que usar `%`, que en un PIC16 sin divisor por hardware lo resuelve una rutina de software más lenta, y esto corre dentro de la ISR.
@@ -174,12 +173,12 @@ reposo ‾‾‾|START|D0|D1|D2|D3|D4|D5|D6|D7|STOP|‾‾‾ reposo
 
 | Buffer | Comportamiento |
 |---|---|
-| RX lleno | La ISR descarta el byte nuevo y marca la bandera de overflow (error 3 del protocolo). No se pisa un dato sin leer |
-| TX lleno | `tx_DAT` y `tx_string` devuelven `false`. Quien llama decide: reintentar o descartar la muestra y contarla |
+| RX lleno | La ISR descarta el byte nuevo y marca la bandera de overflow. No se pisa un dato sin leer |
+| TX lleno | `tx_DAT` y `tx_string` devuelven `false`. `adc_ascii_task` descarta la línea y la cuenta en `adcLineasPerdidas` |
 
-**Cuándo revisar el tamaño:** si la trama pasa de 9 bytes, si sube la frecuencia de muestreo, o si una prueba mide que `main` tarda más de 2,7 ms sin atender el RX. Regla: TX ≥ (tramas por ráfaga × bytes por trama) + 1; RX ≥ (tiempo máximo sin leer ÷ 86,8 µs) + 1.
+**Cuándo revisar el tamaño:** si la línea crece, si se mandan más líneas por segundo, o si se agregan comandos y una prueba mide que `main` tarda más de 2,7 ms sin atender el RX. Regla: TX ≥ (líneas por ráfaga × bytes por línea) + 1; RX ≥ (tiempo máximo sin leer ÷ 86,8 µs) + 1.
 
-**Cómo comprobarlo:** prueba de ráfaga en `docs/protocolos_prueba.md` (módulo 1): mandar tramas seguidas desde el PC y contar bytes perdidos y errores de overflow.
+**Cómo comprobarlo:** prueba 2.4 de `docs/protocolos_prueba.md`: 10 minutos a 500 líneas/s con `adcLineasPerdidas` en 0.
 
 **Diferencia con el MCC de clase:** sus buffers son de 8 bytes y `EUSART1_Read` y `EUSART1_Write` tienen bucles `while` que esperan, algo prohibido por la regla del proyecto.
 
@@ -246,7 +245,7 @@ Fuente de los niveles del CP2102: datasheet del CP2102-GMR (Silicon Labs), secci
 3. Marcado exacto del chip del módulo CP2102 y si tiene jumper de nivel.
 4. Que el chip del PIC sea el `PIC16F18426` y no el `PIC16LF18426` (máximo 3,6 V).
 5. Que el PIC se alimente de los 3,7 V de la placa.
-6. ~~CRC-8 o XOR~~ (resuelto el 2026-10-21: CRC-8, ver §10). Falta la lista final de tipos de trama.
+6. ~~Verificación de las tramas~~ (ya no aplica: desde el 2026-11-04 se manda texto ASCII, §5).
 7. Revisión de silicio (MPLAB X → Dashboard).
 8. Valor `VBOR` del brown-out (el MCC de clase usó `BORV = LO`, 2,45 V).
 9. Con qué ADC y `Vref` calculó el profesor los 352 µV (corresponden a 12 bits y 5 V; con 3,7 V son 261 µV).
@@ -265,13 +264,14 @@ Fuente de los niveles del CP2102: datasheet del CP2102-GMR (Silicon Labs), secci
 | 2026-10-16 | Flash 28 KB y RAM 2 KB (antes 14 KB y 1 KB) | Valores del datasheet |
 | 2026-10-16 | `RX1PPS` es `RX1DTPPS` en el `.h` de XC8 | Visto en el código generado por MCC |
 | 2026-10-16 | TX del PIC pasa por un divisor | El datasheet del CP2102-GMR no describe sus entradas como tolerantes a 5 V, y el máximo es VIO + 0,5 V. Antes se suponía que sí toleraban 5 V |
-| 2026-10-19 | Documentados los motivos del tamaño de los buffers (§6.1): RX 32, TX 64, potencia de 2, comportamiento al llenarse | La revisión de `eusart1.c` de MCC mostró que 8 bytes no cubren una trama y que su RX no controla el desborde |
-| 2026-10-21 | Verificación de tramas con **CRC-8** (polinomio `0x07`, inicial `0x00`, sin reflejo, sobre los bytes 2 a 7). Se descarta el XOR. Formato en `docs/especificacion_protocolo.md` | Decisión de la persona. Cierra el pendiente 6 de §9 en lo que toca al CRC |
+| 2026-10-19 | Documentados los motivos del tamaño de los buffers (§6.1): RX 32, TX 64, potencia de 2, comportamiento al llenarse | La revisión de `eusart1.c` de MCC mostró que 8 bytes son muy pocos y que su RX no controla el desborde |
+| 2026-10-21 | Se escoge una trama binaria con suma de verificación para el enlace | Decisión de la persona. **Reemplazada el 2026-11-04** por el texto ASCII |
 | 2026-10-21 | El PWM de auto-cero usa los **10 bits directos** (sin dithering ni divisor); el residuo de hasta ±20 cuentas se resta después por software. Detalle y motivos en `docs/especificacion_pwm.md` §2 y §9 (D-1) | Decisión de la persona; paso de 3,61 mV en I0 y 36 mV en la salida |
 | 2026-10-21 | El cálculo del filtro RC del PWM (valores de R y C) se **aplaza** | Decisión de la persona; T-06 no lo necesita para empezar |
 | 2026-10-30 | **SINAD del ADC > 60 dB** como requisito de diseño | Decisión de la persona. Condiciones de medición en `docs/especificacion_adc.md` §6 [PROPUESTA] |
-| 2026-10-30 | Se documenta el ADC de T-09: muestreo de 1 kHz por Timer0, promedio de 5 y tipos de trama `0x20`, `0xA0`, `0xA1` | El código ya existía (zip del 2026-10-30); se documentó lo que hace. No hubo cambio de diseño |
-| 2026-11-03 | **Se quita el promedio del ADC** (antes 5 pares, D-1): cada trama `DATA_IQ` lleva una sola muestra de I y de Q; 1000 tramas/s = 78,1 % de la línea | Decisión de la persona. Se pierde la mejora de ruido del promedio (hasta 7 dB) y queda poco margen en la UART (§6.1) |
+| 2026-10-30 | Se documenta el ADC de T-09: muestreo de 1 kHz por Timer0 y promedio de 5 | El código ya existía (zip del 2026-10-30); se documentó lo que hace. No hubo cambio de diseño |
+| 2026-11-03 | **Se quita el promedio del ADC** (antes 5 pares, D-1): cada par lleva una sola muestra de I y de Q | Decisión de la persona. Se pierde la mejora de ruido del promedio (hasta 7 dB) |
+| 2026-11-04 | **Solo texto ASCII**: el PIC manda `I:xxxx,Q:xxxx\r\n` cada 2 pares (500 líneas/s, 65,6 % de la línea) y no recibe comandos. Se borran `crc8.*` y `protocol.*`, se retira T-04 y `adc_prueba.*` pasa a `adc_ascii.*` (§5) | Decisión de la persona: el receptor de la trama binaria en LabVIEW era muy largo; el texto se lee con *VISA Read* + *Scan From String*. Costo: fs = 500 Hz en el PC, sin detección de líneas perdidas, sin comandos (T-07 por replantear) |
 
 
 ---
@@ -287,7 +287,7 @@ Fuente de los niveles del CP2102: datasheet del CP2102-GMR (Silicon Labs), secci
 | Disparo | Timer0 por hardware (`ADACT`) | El instante de muestreo de I no depende del software (el jitter que importa es el del reloj de muestreo, no el de conversión). Sin esperas | `__delay_ms` o iniciar por software: prohibido y con jitter |
 | I y Q | un ADC multiplexado, en ráfaga | Un solo convertidor. Sesgo entre canales de 0,5 % a 20 Hz si la adquisición es de 10 µs, 4,4 % si es de 320 µs [CÁLCULO] | Alternar canales a 2 kHz (sesgo de 500 µs, 6 %); ADC de muestreo simultáneo (innecesario) |
 | Jitter de Q | por vigilar | Q lo arranca la ISR, así que hereda la variación de latencia de las ISR de la UART (hasta 25 µs ⇒ 61 dB a 20 Hz) [CÁLCULO] | Disparar Q por hardware (a decidir si la prueba 4.17 falla) |
-| Promedio | ninguno (una muestra por par) | Decisión de la persona (2026-11-03). Cada trama trae la conversión cruda: sirve tal cual para el histograma y el SINAD del ADC. 1000 tramas/s = 78,1 % de la línea | 5 pares (lo de antes, D-1): bajaba el ruido hasta 7 dB si era blanco y ≥ 0,5 LSB, atenuaba 0,14 dB a 20 Hz y ocupaba 15,6 % de la línea |
+| Promedio | ninguno (una muestra por par) | Decisión de la persona (2026-11-03). Cada línea trae la conversión cruda: sirve tal cual para el histograma y el SINAD del ADC. El PC recibe 1 de cada 2 pares (500 líneas/s) | 5 pares (lo de antes, D-1): bajaba el ruido hasta 7 dB si era blanco y ≥ 0,5 LSB, atenuaba 0,14 dB a 20 Hz y ocupaba 15,6 % de la línea |
 | ISR del ADC | llamada directa desde `interrupt_manager.c` (C-11) | Mismo criterio que C-06: no se cambia la función en ejecución, y se ahorra el salto indirecto | Puntero `ADCC_ADI_InterruptHandler` de MCC |
 | SINAD | > 60 dB | Requisito de la persona. Un 12 bits ideal da 74 dB a escala completa: 14 dB de margen para ruido, jitter, referencia y distorsión | – |
 | Disparo del ADC | `ADACT` = `00010` (`TMR0_overflow`) | Periodo exacto por hardware (`TMR0H` = 249 → 1000 µs), sin recargar por software. El Timer2 es del PWM. `ADACT` solo elige una fuente, así que Q lo arranca la ISR | Timer1/3/5 (16 bits: recarga por software), PWM6/7 (15,6 kHz), pin externo, escribir `ADPCH` o leer `ADRESH` (software, con jitter). Timer4 y Timer6 también servirían (`docs/especificacion_adc.md` §2.1) |

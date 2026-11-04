@@ -8,11 +8,11 @@ Proyecto Micro 3 · Firmware `firmware/Micro_Firmware.X` · Fecha: 2026-10-16 ·
 
 ## 1. Alcance
 
-**Dentro de la Fase 1:** comunicación serie bidireccional PC → PIC y PIC → PC, no bloqueante, con interrupciones, en binario (sin ASCII).
+**Dentro de la Fase 1:** comunicación serie no bloqueante, con interrupciones. Se probó en los dos sentidos con un eco (2026-10-19). Desde el 2026-11-04 el envío es **solo texto ASCII y solo PIC → PC**: líneas `I:xxxx,Q:xxxx\r\n` (`docs/especificacion_protocolo.md`).
 
 **Fuera de la Fase 1** (se diseña después, pero los pines ya quedan reservados): lectura de I y Q con el ADC (**ya especificada en `docs/especificacion_adc.md`; el código de T-09 llegó en un zip el 2026-10-30 y está copiado a `firmware/`, sin probar**), PWM de auto-cero (I0/Q0), máquina de estados de calibración y la interfaz gráfica, que va **en el PC** (LabVIEW o Python), no en el PIC.
 
-**Objetivo de la Fase 1:** demostrar que el PIC recibe y envía bytes y tramas sin pérdidas y sin bloquear el programa principal.
+**Objetivo de la Fase 1:** demostrar que el PIC recibe y envía bytes sin pérdidas y sin bloquear el programa principal.
 
 ---
 
@@ -62,7 +62,7 @@ Registros: `SP1BRGH = 0`, `SP1BRGL = 34`. La fórmula (`Fosc / [4 × (n + 1)]` c
    - **Conversor → PIC:** un conversor a 3,3 V entrega ~3,3 V. Con VDD = 3,7 V, la entrada Schmitt (por defecto) exige VIH ≥ 0,8 × VDD = **2,96 V**, un margen justo. Con entrada TTL basta VIH ≥ 0,25 × VDD + 0,8 = **1,73 V**. **Decisión: configurar RC5 como TTL (`INLVLC5 = 0`)** [VERIFICADO: DS Tabla 39-4 y registro `INLVLC`, p.217].
    - **No** uses un conversor con salida a 5 V: la entrada del PIC no debe superar VDD + 0,3 V.
 3. **Tierra común** entre el conversor USB-serie y la placa.
-4. **Por qué 115200 y no 9600** (de cara a la Fase 2): los filtros de I/Q son de 20 Hz, así que bastan ~100–200 muestras por segundo. Con tramas de 9 bytes eso son 900–1800 B/s (9–18 kbps de los 115,2 kbps). A 9600 baud el enlace se saturaría. Sin promedio (2026-11-03) se mandan 1000 tramas/s = 9000 B/s (78 % de la línea): 115200 es el baud estándar más bajo en que cabe.
+4. **Por qué 115200 y no 9600** (de cara a la Fase 2): se mandan 500 líneas/s de hasta 15 bytes = 7500 B/s (65,6 % de la línea a 114 286 baud). A 9600 baud solo cabrían 64 líneas/s. 115200 es el baud estándar más bajo en que cabe.
 
 ---
 
@@ -104,7 +104,7 @@ Evitar los pines de programación (RA0 = ICSPDAT, RA1 = ICSPCLK, RA3 = MCLR) par
 Razones y consecuencias:
 
 - **Los trimmers I0/Q0 sustituidos por PWM** son los únicos elementos analógicos que el PIC controla. Según el preinforme, `V_out = Vref2 + 10·(I_LPF − I0)`, así que el PWM filtrado y con buffer ocupa el lugar del trimmer.
-- **La gráfica de impedancia no usa pines del PIC.** Los valores de I y Q viajan por la UART y el PC dibuja I (eje X) contra Q (eje Y). Cada muestra de 12 bits ocupa 2 bytes, de modo que I + Q = 4 bytes y caben en el campo de datos de la trama (§8.2). A 1000 muestras/s (sin promedio) son 9000 B/s, el 78,1 % de la capacidad de la línea.
+- **La gráfica de impedancia no usa pines del PIC.** Los valores de I y Q viajan por la UART y el PC dibuja I (eje X) contra Q (eje Y). Cada par viaja como texto, `I:xxxx,Q:xxxx\r\n` (hasta 15 bytes, §8). A 500 líneas/s son 7500 B/s, el 65,6 % de la capacidad de la línea.
 - **Una pantalla local no cabe** en este chip salvo un OLED I2C quitando el LED (0 de reserva). Una pantalla SPI necesitaría 4–5 pines. Si el profe la pide, el reemplazo sin cambios de código es el **PIC16F18446** (20 pines, 18 E/S, 17 canales de ADC; mismo datasheet [VERIFICADO: DS p.14]).
 - **Sin cristal externo:** usaría RA4 (OSC2) y RA5 (OSC1), que aquí son el PWM de Q0 y el LED.
 - **Debe respetarse RA0/RA1/RA3** para que el SNAP pueda programar y depurar.
@@ -140,9 +140,8 @@ Arquitectura guiada por eventos: las interrupciones solo capturan el evento y mu
 | E3 | Error de hardware en RX (framing u overrun) | `FERR` / `OERR` | Marca la bandera de error. El framing **no genera interrupción**: se detecta al leer el byte. Si hay overrun (`OERR`), se recupera con `CREN = 0` y luego `CREN = 1` |
 | E4 | FIFO de RX llena | la ISR no puede guardar | Descarta el byte y marca la bandera de overflow |
 | E5 | FIFO de TX llena | `uart_tx_*` no puede encolar | Devuelve `false` al llamador (no bloquea) |
-| E6 | Trama completa y válida recibida | el parser (programa principal) | Ejecuta el comando y encola la respuesta |
-| E7 | Trama inválida (CRC malo o tipo desconocido) | el parser | Descarta, responde con trama de error y marca el LED |
-| E8 | Terminó una conversión del ADC | `ADIF && ADIE` | `adc_iq_isr()` guarda I (o Q), arranca la conversión siguiente y acumula el par (T-09) |
+| E6 | Hay un par nuevo del ADC | `adc_iq_get()` en el programa principal | Cada 2 pares, `adc_ascii_task()` arma la línea `I:…,Q:…\r\n` y la encola con `tx_string()` |
+| E8 | Terminó una conversión del ADC | `ADIF && ADIE` | `adc_iq_isr()` guarda I (o Q), arranca la conversión siguiente y deja el par listo (T-09) |
 
 ---
 
@@ -151,17 +150,16 @@ Arquitectura guiada por eventos: las interrupciones solo capturan el evento y mu
 | ID | Tarea | Dónde corre | Descripción |
 |---|---|---|---|
 | T1 | `system_init()` | arranque | Oscilador, pines/PPS, EUSART, interrupciones, LED |
-| T2 | bloque RX de la ISR | interrupción (E1, E3, E4) | Mover el byte de hardware a la FIFO de RX. Corto y sin lógica de protocolo |
+| T2 | bloque RX de la ISR | interrupción (E1, E3, E4) | Mover el byte de hardware a la FIFO de RX. Corto. Hoy nadie lee esos bytes (no hay comandos) |
 | T3 | bloque TX de la ISR | interrupción (E2) | Mover un byte de la FIFO de TX al hardware |
 | T4 | `uart_tx_DAT(const uint8_t *data, uint16_t size)` | llamada desde el programa principal | Encola un bloque de bytes. `true` si cupo todo, `false` si no (E5) |
 | T5 | `uart_tx_string(const char *s)` | llamada desde el programa principal | Igual que T4, para cadenas terminadas en `'\0'` (firma pedida en clase) |
-| T6 | `uart_rx_read(uint8_t *byte)` | llamada desde el programa principal | Saca un byte de la FIFO de RX. `false` si está vacía |
-| T7 | `parser_task()` | bucle principal | Lee bytes de la FIFO de RX, busca el encabezado, verifica CRC y ejecuta el comando (E6/E7) |
-| T8 | `status_task()` | bucle principal | Maneja el LED y reporta banderas de error |
-| T9 | `adc_iq_isr()` | interrupción (E8) | Guarda I, arranca Q, guarda Q y suma el par al grupo de 5 (T-09) |
+| T6 | `uart_rx_read(uint8_t *byte)` (`EUSART1_Read`) | llamada desde el programa principal | Saca un byte de la FIFO de RX. `false` si está vacía. Hoy no se usa |
+| T7 | `adc_ascii_task()` | bucle principal | Lee el par con `adc_iq_get`, cada 2 pares arma `I:…,Q:…\r\n` y lo encola (E6) |
+| T9 | `adc_iq_isr()` | interrupción (E8) | Guarda I, arranca Q, guarda Q y deja el par listo (T-09) |
 | T10 | `adc_iq_get(&i, &q)` | llamada desde el programa principal | Entrega el último par (una muestra de I y una de Q, sin promedio) si hay uno nuevo; no espera (T-09) |
 
-**Bucle principal:** `while(1) { parser_task(); status_task(); }`, sin esperas bloqueantes (prohibido `while(!TXIF)` y `__delay_ms` en la lógica).
+**Bucle principal:** `while(1) { adc_ascii_task(); }`, sin esperas bloqueantes (prohibido `while(!TXIF)` y `__delay_ms` en la lógica).
 
 **Una sola ISR:** el chip tiene un único vector de interrupción (`0x0004`) y no tiene prioridades. T2 y T3 son dos bloques dentro de la misma función `void __interrupt() isr(void)`, que comprueba **bandera y habilitación** de cada fuente y limpia (o consume) la bandera antes de salir. No se rehabilita `GIE` dentro de la ISR [VERIFICADO: UG §5.8]. Con T-09 se suma un tercer bloque, el del ADC (`ADIF` y `ADIE`), que `interrupt_manager.c` atiende después de TX y RX.
 
@@ -189,40 +187,24 @@ Las operaciones de la FIFO que compartan estado entre la ISR y el programa princ
 
 ---
 
-## 8. Protocolo (binario, sin ASCII)
+## 8. Formato de envío (texto ASCII)
 
-### 8.1 Fase 1a: eco crudo
+### 8.1 Fase 1a: eco crudo (ya probado)
 
-El PIC devuelve exactamente cada byte que recibe. Sirve para validar cableado, baud rate y las dos direcciones sin protocolo.
+El PIC devolvía exactamente cada byte que recibía. Sirvió para validar cableado, baud rate y las dos direcciones (pruebas 1.5, 1.6 y 1.7, pasaron el 2026-10-19). Ese código ya no está en el firmware.
 
-### 8.2 Fase 1b: trama de 9 bytes (borrador)
+### 8.2 Envío de datos: una línea de texto por par
 
-Una **trama** es un grupo de bytes con estructura fija. Todas miden 9 bytes y son iguales en ambos sentidos, así no hace falta campo de longitud.
+```
+I:2048,Q:2051\r\n
+```
 
-| Byte | Campo | Descripción |
-|---|---|---|
-| 0 | `SYNC1` | `0xA5` |
-| 1 | `SYNC2` | `0x5A` |
-| 2 | `TYPE` | tipo de trama |
-| 3 | `SEQ` | contador 0–255, para detectar tramas perdidas |
-| 4–7 | `PAYLOAD` | 4 bytes, su significado depende de `TYPE` (en la Fase 2 llevará los datos medidos) |
-| 8 | `CRC8` | CRC-8 (polinomio `0x07`, valor inicial `0x00`) calculado sobre los bytes 2 a 7 |
+- I y Q en decimal, de 0 a 4095, sin ceros a la izquierda; termina en `\r\n`. Hasta 15 bytes.
+- Una línea cada 2 pares del ADC = **500 líneas/s** (`ADC_PARES_POR_LINEA` en `adc_ascii.h`). Una de 15 bytes tarda 1,31 ms; la línea va al 65,6 %.
+- Solo PIC → PC. El PIC empieza a mandar al encender y no recibe comandos.
+- El PC lee hasta `\n` y separa con `I:%d,Q:%d`; una línea con otra forma se descarta.
 
-- **Orden de bytes:** big-endian (byte alto primero), que es el que usa LabVIEW por defecto al convertir bytes a enteros.
-- **Resincronización:** si el CRC falla, el receptor descarta 1 byte y busca de nuevo `A5 5A`.
-- **Tipos de la Fase 1:**
-
-| TYPE | Sentido | Nombre | Payload |
-|---|---|---|---|
-| `0x01` | PC → PIC | PING | libre (4 bytes cualquiera) |
-| `0x81` | PIC → PC | PONG | copia el payload y el `SEQ` del PING |
-| `0x7F` | PIC → PC | ERROR | `payload[0]` = código de error |
-
-- **Códigos de error:** `1` CRC inválido, `2` tipo desconocido, `3` overflow de la FIFO de RX, `4` error de hardware (framing/overrun).
-- **Tipos de la Fase 2 (ADC, T-09; en `protocol.h` y `protocol.c` desde el 2026-10-30, sin probar):** `0x20` ADC_STREAM (PC → PIC; `P0` = 0 detener, ≠ 0 iniciar), `0xA0` ADC_ACK (PIC → PC; copia el `SEQ` y `P0` = estado) y `0xA1` DATA_IQ (PIC → PC; I en `P0:P1`, Q en `P2:P3`, big-endian, `SEQ` propio). Detalle y ocupación de la línea: `docs/especificacion_adc.md` §11.
-- **Rendimiento:** 9 bytes = 90 bits → 781 µs por trama a 115200 baud (máx. ~1280 tramas/s).
-
-[PENDIENTE] La lista final de tipos de trama (CRC-8 ya decidido el 2026-10-21; faltan los de PWM, CP-1).
+Detalle, cuentas y motivos: `docs/especificacion_protocolo.md` y `docs/criterios_diseno.md` §5.
 
 ---
 
@@ -230,13 +212,11 @@ Una **trama** es un grupo de bytes con estructura fija. Todas miden 9 bytes y so
 
 | # | Prueba | Criterio de éxito |
 |---|---|---|
-| P1 | Eco de 1 byte desde una terminal serie en hexadecimal | vuelve el mismo byte |
-| P2 | Ráfaga de 1000 bytes | vuelven los 1000 bytes sin pérdidas ni cambios |
-| P3 | Enviar mientras el PIC transmite | sin pérdidas y el programa principal nunca se queda esperando |
-| P4 | PING con payload conocido | PONG con el mismo `SEQ` y payload, CRC correcto |
-| P5 | PING con CRC alterado | el PIC responde ERROR (código 1) y sigue funcionando |
-| P6 | Bytes basura antes de una trama válida | el parser resincroniza y responde al PING |
-| P7 | Desconectar y reconectar el cable | el enlace se recupera sin reiniciar el PIC |
+| P1 | Eco de 1 byte desde una terminal serie en hexadecimal | vuelve el mismo byte (pasó el 2026-10-19, con el código de eco de entonces) |
+| P2 | Ráfaga de 1000 bytes | vuelven los 1000 bytes sin pérdidas ni cambios (pasó el 2026-10-19) |
+| P3 | Líneas `I:…,Q:…` en una terminal | 500 líneas/s con la forma correcta (pruebas 2.1 y 2.2) |
+| P4 | 10 minutos de captura | 0 líneas malas después de la primera y `adcLineasPerdidas` = 0 (prueba 2.4) |
+| P7 | Desconectar y reconectar el cable | el enlace se recupera sin reiniciar el PIC (prueba 2.5) |
 | P8 | **SINAD del ADC** con una senoidal de 5 Hz y otra de 20 Hz (1,7 V de amplitud, centrada en 1,85 V) en RC0 y RC1 | **SINAD > 60 dB** (prueba 4.15 de `docs/protocolos_prueba.md`) |
 | P9 | Muestreo de I y Q | `fs` = 1 kHz ± 1 % y las dos conversiones en menos de 1 ms (pruebas 4.5 y 4.16) |
 | P10 | Histograma con la entrada fija | σ y códigos distintos anotados (prueba 4.3) |
@@ -249,7 +229,7 @@ Una **trama** es un grupo de bytes con estructura fija. Todas miden 9 bytes y so
 2. Que el PIC se alimente de los mismos 3,7 V que PCB2, y el modelo exacto del conversor USB-serie con su nivel lógico.
 3. Que los pines propuestos (§3) coincidan con tu placa o protoboard.
 4. **Revisión de silicio del chip** (MPLAB X → *Window > Dashboard*). Si es A4, ninguna errata del EUSART aplica. Si es A1/A2, la regla de escribir `TX1REG` solo con `TX1IF = 1` ya cubre el workaround (ER 1.9.2).
-5. CRC-8 o XOR, y la lista de tipos de trama.
+5. Formato de los comandos de texto, si se agregan (T-07, control del PWM).
 6. WDT: se deja desactivado en desarrollo. ¿Se activa en la versión final?
 7. Valores exactos de los bits de configuración: generarlos con MPLAB X (*Window > Target Memory Views > Configuration Bits*) o consultar `pic_chipinfo.html` de la carpeta `docs` de XC8.
 8. Qué terminal se usará para las pruebas (Realterm, Hercules, Tera Term) y si el PC ya tiene el driver del conversor.
@@ -287,4 +267,4 @@ XC8 exige programar **todos** los bits de configuración, y los valores numéric
 | `TB3261-Technical-Brief-DS90003261A.pdf` | Cómo escribir C para PIC16/PIC18 |
 | `00688b.pdf` | AN688: layout para ADC de 12 bits (relevante para PCB, no para el firmware) |
 | `Preinforme Practica 2 Final-...pdf` | Alimentación, filtros de 20 Hz, referencias de 1,85 V |
-| `especificacion_adc.md` | **ADC:** requisitos del profesor, SINAD > 60 dB, tiempos, jitter, referencia, histograma y tramas de datos |
+| `especificacion_adc.md` | **ADC:** requisitos del profesor, SINAD > 60 dB, tiempos, jitter, referencia, histograma y envío de datos |

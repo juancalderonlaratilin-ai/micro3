@@ -10,7 +10,7 @@ Proyecto Micro 3 · Fecha: 2026-10-16 · Borrador v1
 |---|---|---|
 | 0. Puesta en marcha (alimentación, programación, reloj) | 1 | por hacer |
 | 1. UART (enlace físico, buffer circular, ISR) | 1 | por hacer |
-| 2. Protocolo de tramas (CRC, errores, resincronización) | 1 | por hacer |
+| 2. Envío en texto ASCII (líneas `I:…,Q:…`) | 2 | el modo ASCII funciona (la persona, 2026-11-04); faltan 2.1 a 2.6 con 500 líneas/s |
 | 3. PWM + filtro RC (auto-cero) | 2 | por hacer |
 | 4. ADC (canales I y Q) | 2 | código implementado (T-09), sin probar en el chip |
 | 5. Pulsador y lazo de auto-cero | 2 | por hacer |
@@ -46,13 +46,15 @@ Proyecto Micro 3 · Fecha: 2026-10-16 · Borrador v1
 
 Configuración: 8N1, 115200 baud, `SP1BRG = 34` (baud real 114 286, error −0,79 %).
 
+> Las pruebas de eco (1B y 1D) se hicieron el 2026-10-19 con un `main.c` de eco que ya no está en el firmware (desde el 2026-11-04 el PIC solo manda líneas de texto). Quedan como registro; para repetirlas haría falta volver a escribir ese eco.
+
 ### 1A. Capa física (osciloscopio sobre RC4 = TX)
 
 | ID | Qué se verifica | Procedimiento | Valor esperado | Criterio | Resultado |
 |---|---|---|---|---|---|
 | 1.1 | Niveles lógicos de TX | Enviar el byte `0xFF` repetido y medir el nivel alto y bajo en RC4 | Alto ≈ 3,7 V, bajo ≈ 0 V | VOH ≥ 3,3 V y VOL ≤ 0,4 V | |
 | 1.2 | Ancho de bit | Enviar `0x55` repetido (onda cuadrada) y medir el período | Bit = 8,75 µs (período 17,5 µs) | Dentro de ±2 % de 8,68 µs nominal: 8,51 a 8,85 µs | |
-| 1.3 | Formato de la trama | Decodificar un byte con el osciloscopio (modo serie) | 1 bit de inicio, 8 de datos (LSB primero), 1 de parada. Duración 10 bits = 87,5 µs | Decodificación correcta de 10 bytes seguidos | |
+| 1.3 | Formato del byte | Decodificar un byte con el osciloscopio (modo serie) | 1 bit de inicio, 8 de datos (LSB primero), 1 de parada. Duración 10 bits = 87,5 µs | Decodificación correcta de 10 bytes seguidos | |
 | 1.4 | Nivel mínimo de RX | Con el conversor conectado, medir el nivel alto que llega a RC5 | ≈ 3,3 V | ≥ 1,73 V (umbral TTL de RC5 con VDD = 3,7 V) | |
 
 ### 1B. Eco y buffers (terminal serie en el PC)
@@ -86,20 +88,18 @@ Configuración: 8N1, 115200 baud, `SP1BRG = 34` (baud real 114 286, error −0,7
 
 ---
 
-## Módulo 2. Protocolo de tramas (Fase 1b)
+## Módulo 2. Envío en texto ASCII (Fase 2)
 
-Trama de 9 bytes: `A5 5A | TYPE | SEQ | PAYLOAD(4) | CRC8`. Un PING válido debe responderse con un PONG en 781 µs de transmisión.
+El PIC manda `I:xxxx,Q:xxxx\r\n` cada 2 pares del ADC: 500 líneas por segundo, sin comando del PC (`docs/especificacion_protocolo.md`). Herramientas: una terminal serie, `herramientas/receptor_micro3.py` o `herramientas/interfaz_micro3.py`.
 
 | ID | Qué se verifica | Procedimiento | Valor esperado | Criterio | Resultado |
 |---|---|---|---|---|---|
-| 2.1 | CRC-8 contra el PC | Calcular el CRC de 3 tramas a mano o en Python (polinomio `0x07`, sobre los bytes 2 a 7) y compararlo con el que genera el PIC | Iguales | 3 de 3 | |
-| 2.2 | PING válido | Enviar un PING con payload conocido | PONG con el mismo `SEQ` y payload, CRC correcto | 20 de 20 | |
-| 2.3 | CRC alterado | Cambiar un bit del CRC | El PIC responde ERROR (código 1) | 10 de 10, y el PIC sigue funcionando | |
-| 2.4 | Tipo desconocido | Enviar `TYPE = 0x55` con CRC correcto | ERROR (código 2) | 10 de 10 | |
-| 2.5 | Basura antes de una trama | Enviar bytes aleatorios y después un PING | Resincroniza y responde al PING | 20 de 20 | |
-| 2.6 | Trama partida | Enviar la trama en dos partes con una pausa de 50 ms | Responde al PING completo | 10 de 10 | |
-| 2.7 | Tramas seguidas | 1000 PING consecutivos con `SEQ` creciente | 1000 PONG con `SEQ` correlativo | Sin pérdidas ni repetidos | |
-| 2.8 | Latencia | Medir con el osciloscopio el tiempo entre el último bit del PING y el primer bit del PONG | Anotar | ≤ 2 ms **[PROPUESTA]** | |
+| 2.1 | Forma de la línea | Abrir una terminal a 115200 8N1 y mirar 20 líneas | `I:` + número + `,Q:` + número + fin de línea; números de 0 a 4095 | 20 de 20 con la forma correcta | |
+| 2.2 | Líneas por segundo | `receptor_micro3.py COM5 --muestras 10000` y leer el resumen | 500 muestras/s (1000 / `ADC_PARES_POR_LINEA`) | 500 ± 1 % | |
+| 2.3 | Tiempo de una línea | Osciloscopio en RC4 (TX), con decodificador serie si hay | Ráfaga de 15 bytes de ≈ 1,31 ms cada 2 ms | 1,25 a 1,40 ms; periodo 2 ms ± 1 % | |
+| 2.4 | Sin pérdidas | 10 min con `interfaz_micro3.py` y el depurador de MPLAB X | 300 000 líneas | Líneas malas ≤ 1 (la primera, cortada) y `adcLineasPerdidas` = 0 | |
+| 2.5 | Arranque y reconexión | Encender el PIC con el PC ya escuchando; luego desconectar y reconectar el USB | Llega `Micro3 listo` y después las líneas; al reconectar siguen llegando | Sin reiniciar el PIC | |
+| 2.6 | Valor correcto | Entrada fija de 1,000 V medida con el multímetro en RC0 (y en RC1) | Código ≈ 1,000 × 4096 / 3,7 = 1107 | ± 10 códigos del calculado con la VDD medida | |
 
 ---
 
@@ -129,7 +129,7 @@ ADC de 12 bits con referencia VDD = 3,7 V: 1 LSB = 3,7 V / 4096 = 0,903 mV. La s
 
 Muestreo a 1 kHz disparado por Timer0, I y Q convertidos en menos de 1 ms, sin promedio: una muestra de cada canal por milisegundo (se quitó `ADC_N_PROMEDIO` el 2026-11-03). Especificación: `docs/especificacion_adc.md`. **Requisito de la persona (2026-10-30): SINAD del ADC > 60 dB** (prueba 4.15).
 
-Antes de las pruebas: `MODO_PRUEBA_ADC = 0` en `main.c` (con 1 solo se manda texto para el Serial Plotter, prueba 4.18) (el histograma ya no necesita recompilar: no hay promedio). Pines de prueba: RC2 sube durante `adc_iq_isr()`; hay **dos pulsos por periodo** (fin de la conversión de I y fin de la de Q).
+Los datos llegan al PC como líneas `I:…,Q:…` a 500 por segundo (1 de cada 2 pares; el ADC sigue muestreando a 1 kHz). Pin de prueba RC2 (`ADC_PIN_PRUEBA` en `adc_iq.h`): con 1 sube durante `adc_iq_isr()` (**dos pulsos por periodo**, fin de I y fin de Q); con 2 saca la salida del Timer0 (cuadrada de 500 Hz, cada flanco es un disparo).
 
 | ID | Qué se verifica | Procedimiento | Valor esperado | Criterio | Resultado |
 |---|---|---|---|---|---|
@@ -141,13 +141,13 @@ Antes de las pruebas: `MODO_PRUEBA_ADC = 0` en `main.c` (con 1 solo se manda tex
 | 4.6 | Señal de 20 Hz | Inyectar una senoidal de 5 Hz y otra de 20 Hz con un generador, y capturar la forma por UART | Amplitud y frecuencia correctas | Frecuencia ± 2 %, amplitud ± 5 % **[PROPUESTA]** | |
 | 4.7 | Aliasing | Inyectar una señal por encima de fs/2 | Se atenúa por el filtro de 20 Hz | La señal medida está por debajo de 3 LSB | |
 | 4.8 | Tiempo de adquisición | Cambiar la fuente de alta a baja impedancia y comparar; repetir con la salida real del opa de PCB2 (`docs/especificacion_adc.md` §3.2) | Mismo código | Diferencia ≤ 2 LSB. Si no, aumentar el tiempo de adquisición con la fórmula de `docs/especificacion_adc.md` §3.1 | |
-| 4.10 | Compatibilidad con el eco *(inferida del código)* | Con `MODO_ECO` = 1 y el ADC en marcha, repetir 1.5, 1.6 y 1.7 | El eco no se afecta | Las tres siguen pasando | |
+| 4.10 | *(retirada el 2026-11-04: era la compatibilidad con el eco, que ya no está en el firmware)* | — | — | — | |
 | 4.13 | Duración de `adc_iq_isr()` *(inferida del código)* | Ancho del pulso de RC2 con el osciloscopio | Anotar | ≤ 25 µs **[PROPUESTA]**, igual que 1.10 y 1.11 | |
-| 4.14 | Sin pérdidas *(inferida del código)* | 10 min con `ADC_STREAM` encendido (1000 tramas/s, 78 % de la línea); leer `adcParesPerdidos` y `adcTramasPerdidas` en el depurador y revisar el `SEQ` de `DATA_IQ` en el PC | Ambos contadores en 0 | `SEQ` sin saltos | |
-| **4.15** | **SINAD del ADC (requisito > 60 dB)** | Generador **directo** en RC0 (luego RC1), sin PCB2, con ≤ 10 kΩ. Senoidal de 1,7 V de amplitud centrada en 1,85 V a 5 Hz y a 20 Hz (para ciclos enteros con `fs` = 1000 Hz y 4096 muestras: `k` = 21 da 5,127 Hz y `k` = 83 da 20,26 Hz; con otra frecuencia, la ventana de Kaiser de `sinad_db` reduce el error). Repetir con 0,5 V de amplitud. Capturar 4096 pares por `DATA_IQ` (4,1 s, sin promedio) y calcular con `sinad_db` (`docs/especificacion_adc.md` §6) | 73 dB si solo hay cuantización | **SINAD ≥ 60 dB** (ENOB ≥ 9,67 bits) a 5 Hz y 20 Hz en I y en Q | |
+| 4.14 | Sin pérdidas *(inferida del código)* | 10 min de envío (500 líneas/s, 65,6 % de la línea); leer `adcParesPerdidos` y `adcLineasPerdidas` en el depurador | Ambos contadores en 0 | Y 500 líneas/s en el PC (prueba 2.4) | |
+| **4.15** | **SINAD del ADC (requisito > 60 dB)** | Generador **directo** en RC0 (luego RC1), sin PCB2, con ≤ 10 kΩ. Senoidal de 1,7 V de amplitud centrada en 1,85 V a 5 Hz y a 20 Hz (para ciclos enteros con `fs` = 500 Hz en el PC y 4096 muestras: `k` = 41 da 5,005 Hz y `k` = 163 da 19,90 Hz; con otra frecuencia, la ventana de Kaiser reduce el error). Repetir con 0,5 V de amplitud. Capturar 4096 pares (8,2 s a 500 líneas/s) con `herramientas/interfaz_micro3.py` (`docs/interfaz_mediciones.md` §3) | 73 dB si solo hay cuantización | **SINAD ≥ 60 dB** (ENOB ≥ 9,67 bits) a 5 Hz y 20 Hz en I y en Q | |
 | 4.16 | Tiempo real de adquisición y ráfaga de I y Q | Osciloscopio en RC2, disparado en el flanco de subida del primer pulso: tiempo desde el flanco de bajada del primer pulso hasta el flanco de subida del segundo | ≈ 38,5 µs si `ADACQ` cuenta ciclos de Fosc (10 µs, lo que guarda MCC); ≈ 68,5 µs si cuenta `TCY` (40 µs, Fig. 32-2); ≈ 349 µs si cuenta `TAD` (320 µs, DS p.529). Cada medida puede tener 2 a 4 µs de más por la latencia de la ISR | I + Q terminan en < 1 ms (≤ 800 µs, 20 % de margen). Anotar cuál de los tres casos es (CP-7) | |
 | 4.17 | Jitter del instante de muestreo de Q | Con la UART transmitiendo y recibiendo, osciloscopio en persistencia sobre RC2: variación de la separación entre el pulso de I y el de Q | Anotar el ancho de la variación `T` | `T` ≤ 8,7 µs (−70 dB a 20 Hz y escala completa) **[PROPUESTA]**; hasta 27 µs consume los 60 dB enteros | |
-| 4.18 | Prueba temporal del Serial Plotter (`MODO_PRUEBA_ADC = 1`) | Generador en RC0/RC1 con una senoidal de menos de 10 Hz; ver `I:...,Q:...` en el Serial Plotter de Arduino IDE | I y Q siguen al generador; `adcPruebaLineasPerdidas` = 0 | Solo cualitativa (20 líneas/s); **no** sirve para SINAD ni histograma | |
+| 4.18 | Serial Plotter | Generador en RC0/RC1; abrir el Serial Plotter del Arduino IDE a 115200 | I y Q siguen al generador; `adcLineasPerdidas` = 0 | Solo cualitativa (a 500 líneas/s corre rápido; con `ADC_PARES_POR_LINEA` = 50 se ve mejor una señal lenta) | |
 
 Las pruebas **4.9, 4.11 y 4.12** también las cita el código, pero su definición (en `docs/instrucciones_claude_code_adc.md`, que no está en la carpeta) no se encontró: sin definir. Las 4.10, 4.13 y 4.14 se reconstruyeron de los comentarios del código y deben revisarse.
 
@@ -158,7 +158,7 @@ Las pruebas **4.9, 4.11 y 4.12** también las cita el código, pero su definici�
 | ID | Qué se verifica | Procedimiento | Valor esperado | Criterio | Resultado |
 |---|---|---|---|---|---|
 | 5.1 | Antirrebote | Presionar el botón 50 veces | Un solo evento por pulsación | 50 de 50 | |
-| 5.2 | Disparo por comando | Enviar el comando de auto-cero por UART | Inicia la calibración | Responde con una trama de aceptación | |
+| 5.2 | Disparo por comando | Enviar el comando de auto-cero por UART (formato de texto por definir, T-07) | Inicia la calibración | Responde con una línea de aceptación | |
 | 5.3 | Convergencia | Introducir un desbalance (mover un trimmer o inyectar una tensión) y ejecutar el auto-cero | I y Q llegan cerca de 2048 | diferencia con 2048 de 3 LSB o menos en ambos canales **[PROPUESTA]** | |
 | 5.4 | Tiempo de calibración | Cronometrar desde el inicio hasta el fin | Anotar | ≤ 5 s **[PROPUESTA]** | |
 | 5.5 | Repetibilidad | Repetir la calibración 10 veces con el mismo desbalance | Mismo duty final | Variación ≤ 2 pasos | |
@@ -171,12 +171,12 @@ Las pruebas **4.9, 4.11 y 4.12** también las cita el código, pero su definici�
 
 | ID | Qué se verifica | Procedimiento | Valor esperado | Criterio | Resultado |
 |---|---|---|---|---|---|
-| 6.1 | Recepción en LabVIEW o Python | Conectar y leer tramas de datos con I y Q | Valores iguales a los de la terminal | Coinciden en 100 muestras | |
+| 6.1 | Recepción en LabVIEW o Python | Conectar y leer las líneas `I:…,Q:…` (`docs/guia_labview_paso_a_paso.md`) | Valores iguales a los de la terminal | Coinciden en 100 muestras | |
 | 6.2 | Plano de impedancia | Con la sonda sobre un tubo sano (en reposo) | Punto o nube pequeña cerca del origen | Nube de radio ≤ 5 LSB **[PROPUESTA]** | |
 | 6.3 | Defecto | Pasar la sonda por un defecto conocido | Trayectoria clara fuera de la nube | Se distingue del ruido | |
 | 6.4 | Indicador | Sano / dañado en el panel | Verde en reposo, rojo con defecto | 10 de 10 | |
-| 6.5 | Tasa de datos | 1000 muestras/s durante 10 min | 600 000 tramas sin pérdidas | 0 tramas perdidas (contadores de `SEQ`) | |
-| 6.6 | Carga del enlace | Calcular la ocupación | 1000 × 781 µs = 78,1 % (sin promedio) | Menor del 50 %. **Con 1000 tramas/s no se cumple: la persona decide si se acepta el 78 % o se cambia el criterio** | |
+| 6.5 | Tasa de datos | 500 líneas/s durante 10 min | 300 000 líneas | Líneas malas ≤ 1 y `adcLineasPerdidas` = 0 | |
+| 6.6 | Carga del enlace | Calcular la ocupación | 500 × 1,31 ms = 65,6 % | Menor del 50 %. **Con 500 líneas/s de 15 bytes no se cumple: la persona decide si se acepta el 65,6 % o se cambia el criterio** | |
 
 ---
 

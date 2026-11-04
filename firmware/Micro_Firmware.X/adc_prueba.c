@@ -1,5 +1,6 @@
 /* [PRUEBA ADC] adc_prueba.c: prueba TEMPORAL; manda "I:xxxx,Q:xxxx\r\n" cada
- * PRUEBA_PARES_POR_LINEA pares (50 = 20 líneas por segundo) para el Serial Plotter.
+ * PRUEBA_PARES_POR_LINEA pares (2 = 500 líneas por segundo) para el Serial Plotter y
+ * para herramientas/interfaz_micro3.py.
  * Usa los pares que entrega adc_iq_get() (T-09): una sola muestra de I y una de Q, sin
  * promediar. La copia con ADIE apagado un instante la hace adc_iq_get(). */
 
@@ -88,7 +89,8 @@ void adc_prueba_task(void)
 
     /* tx_string solo encola los bytes y regresa; si no caben (devuelve false), no espera ni
      * reintenta: la línea se descarta y solo se cuenta. A 115200 baudios 15 bytes tardan
-     * ~1,3 ms y hay 50 ms entre líneas, así que no debería pasar. */
+     * ~1,3 ms y hay 2 ms entre líneas (con PRUEBA_PARES_POR_LINEA = 2), así que no debería
+     * pasar; adcPruebaLineasPerdidas debe quedar en 0. */
     if (!tx_string(linea))
     {
         adcPruebaLineasPerdidas++;
