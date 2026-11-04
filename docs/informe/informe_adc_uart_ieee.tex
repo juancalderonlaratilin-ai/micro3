@@ -8,6 +8,8 @@
 \usepackage{amsmath,amssymb}
 \usepackage{microtype}
 \usepackage{booktabs,tabularx,array,float}
+\usepackage{graphicx}
+\usepackage{placeins}
 \usepackage{enumitem}
 \usepackage{titlesec}
 \usepackage{caption}
@@ -20,6 +22,7 @@
 \renewcommand{\tablename}{Tabla}
 \renewcommand{\refname}{Referencias}
 \renewcommand{\abstractname}{Resumen}
+\renewcommand{\figurename}{Fig.}
 
 % ---------------------------------------------------------------- estilo IEEE
 \renewcommand{\thesection}{\Roman{section}}
@@ -32,6 +35,7 @@
 \renewcommand{\thetable}{\Roman{table}}
 \captionsetup[table]{labelfont=sc, textfont=sc, labelsep=newline,
                      justification=centering, skip=6pt, font=small}
+\captionsetup[figure]{labelsep=period, font=small, justification=justified, skip=4pt}
 
 \setlength{\parindent}{1.2em}
 \setlength{\parskip}{0.3em}
@@ -215,6 +219,48 @@ Legible en terminal & no & \textbf{sí} (Serial Plotter) & \textbf{sí} \\
 
 \subsection{Decisión}
 Se usa la \textbf{trama binaria de 9 bytes} para los datos (lo pidió el profesor: el ASCII es pesado para el procesador). El ASCII queda solo como prueba visual (\texttt{MODO\_PRUEBA\_ADC}\,=\,1), mandando 1 línea cada 50 muestras: 20 líneas/s, el \SI{2.6}{\percent} de la línea.
+
+% ================================================================ V
+\section{Diagramas de tiempo}
+
+Las Figs.~\ref{fig:periodo}--\ref{fig:ascii} se generaron con el script \texttt{generar\_diagramas\_tiempo.m} (MATLAB). Los tiempos del ADC y de la UART son exactos: salen del datasheet (conversión de \SI{28.5}{\micro\second}, latencia de interrupción) o de los registros (periodo de \SI{1}{\milli\second}, \num{114286} baud). Los tiempos de CPU son una \emph{previsión}: se estimaron contando instrucciones a 4 instrucciones/\si{\micro\second} y se medirán con un pin marcador y el osciloscopio. Todas las figuras suponen una adquisición de \SI{10}{\micro\second}.
+
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=\textwidth]{figuras/fig1_periodo_1ms.png}
+\caption{Un periodo de muestreo completo. El Timer0 dispara la conversión de $I$ por hardware en $t = 0$; la ráfaga $I + Q$ termina hacia los \SI{97}{\micro\second}. El programa principal arma la trama ($\approx$\SI{215}{\micro\second}) y la deja en la cola. La trama ocupa la línea \SI{787.5}{\micro\second} (\SI{79}{\percent} del periodo) y termina después del siguiente disparo; la última interrupción de TX ($\approx$\SI{1016}{\micro\second}) cae cerca de la ráfaga siguiente y puede retrasar unos \SI{6}{\micro\second} el arranque de $Q$.}
+\label{fig:periodo}
+\end{figure}
+
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=\textwidth]{figuras/fig2_rafaga_IQ.png}
+\caption{Lectura del ADC. Cada canal tiene \SI{10}{\micro\second} de adquisición y \SI{28.5}{\micro\second} de conversión ($14\,T_{AD} + 2\,T_\text{CY}$). Al terminar $I$, la interrupción (latencia de \SIrange{0.75}{1}{\micro\second}) lee \texttt{ADRES}, cambia \texttt{ADPCH} a RC1 y arranca $Q$. Por eso la muestra de $Q$ queda $\approx$\SI{46}{\micro\second} después de la de $I$. Los pulsos de RC2 marcan cada interrupción: su ancho es la duración de la ISR y la separación entre ellos revela la adquisición real.}
+\label{fig:rafaga}
+\end{figure}
+
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=\textwidth]{figuras/fig3_armado_trama.png}
+\caption{Conversión de los datos y armado de la trama. Pasar $I$ y $Q$ al formato de la trama es solo partir cada valor de 12 bits en dos bytes ($\approx$\SI{2.5}{\micro\second}). Lo que más tarda es el CRC-8 bit a bit ($\approx$\SI{150}{\micro\second}), seguido de la copia al buffer de TX con \texttt{tx\_DAT} ($\approx$\SI{50}{\micro\second}). Al poner \texttt{TX1IE} = 1, la interrupción de TX carga los primeros bytes y la trama empieza a salir.}
+\label{fig:armado}
+\end{figure}
+
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=0.92\textwidth]{figuras/fig4_byte_trama.png}
+\caption{(a) Byte \texttt{0xA5} en la línea: bit de inicio en 0, los 8 datos empezando por el menos significativo (1,0,1,0,0,1,0,1) y bit de parada en 1. Cada bit dura \SI{8.75}{\micro\second} y el byte \SI{87.5}{\micro\second}. (b) Trama completa del ejemplo $I = 2048$, $Q = 2051$, SEQ = 5: 9 bytes, \SI{787.5}{\micro\second}.}
+\label{fig:byte}
+\end{figure}
+
+\begin{figure}[!ht]
+\centering
+\includegraphics[width=\textwidth]{figuras/fig5_ascii_binario.png}
+\caption{ASCII frente a binario en dos periodos. Convertir $I$ y $Q$ a decimal y armar la línea cuesta $\approx$\SI{305}{\micro\second} de CPU, y la línea \texttt{I:2048,Q:2051\textbackslash r\textbackslash n} (15 bytes) dura \SI{1312.5}{\micro\second}, más que el periodo de \SI{1}{\milli\second}: a \SI{1}{\kilo\hertz} no cabe. La trama binaria (\SI{787.5}{\micro\second}) sí cabe en cada periodo.}
+\label{fig:ascii}
+\end{figure}
+
+\FloatBarrier
 
 % ================================================================ referencias
 \begin{thebibliography}{9}\small\setlength{\itemsep}{0pt}

@@ -52,7 +52,7 @@
 /* [PRUEBA ADC] MODO_PRUEBA_ADC: 1 = prueba TEMPORAL del ADC: el bucle solo manda líneas de
  * texto "I:2048,Q:2051" (20 por segundo, PRUEBA_PARES_POR_LINEA en adc_prueba.h) para verlas
  * en el Serial Plotter del Arduino IDE (no atiende el protocolo ni el eco). 0 = todo queda como antes (MODO_ECO decide). Se cambia aquí y se recompila. */
-#define MODO_PRUEBA_ADC 1
+#define MODO_PRUEBA_ADC 0
 
 /* [T-04] MODO_ECO: 1 = el programa devuelve cada byte tal cual llega (eco crudo, para repetir
  * las pruebas 1.5, 1.6 y 1.7 del Módulo 1). 0 = el programa atiende el protocolo de tramas

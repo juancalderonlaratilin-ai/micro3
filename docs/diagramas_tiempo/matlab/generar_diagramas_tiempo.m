@@ -97,7 +97,7 @@ gris    = [0.6 0.6 0.6];
 claro   = @(c) c + (1-c)*0.55;
 
 %% Figura 1: un periodo completo
-f = nueva_figura([100 100 1100 480]);
+f = nueva_figura([100 100 1000 480]);
 ax = gca; hold on;
 filas = {'RC2 (marca ISR)', 'UART TX', 'main', 'Interrupciones', 'ADC', 'Timer0'};
 % Timer0: pulso en cada coincidencia
@@ -120,13 +120,13 @@ t_isr_tx = [m_dat, m_dat+7, tx_ini + (1:8)*t_byte];
 for k = 1:numel(t_isr_tx)
     bloque(t_isr_tx(k), t_isr_tx(k)+t_txisr, 4, morado, '');
 end
-text(isrQ_fin+8, 4.45, 'ISR ADC', 'Color', naranja, 'FontSize', 8);
-text(t_isr_tx(3)+8, 4.45, 'ISR TX (1 por byte)', 'Color', morado, 'FontSize', 8);
+text(isrQ_fin+8, 4.45, 'ISR ADC', 'Color', naranja, 'FontSize', 11);
+text(t_isr_tx(3)+8, 4.45, 'ISR TX (1 por byte)', 'Color', morado, 'FontSize', 11);
 % main
 bloque(m_ini, m_head, 3, claro(verde), '');
 bloque(m_head, m_crc, 3, verde, 'CRC-8');
-bloque(m_crc, m_dat, 3, verde, 'tx_DAT');
-text(m_dat+10, 3, 'protocol_task() (libre)', 'FontSize', 8, 'Color', [0.4 0.4 0.4]);
+bloque(m_crc, m_dat, 3, verde, 'tx');
+text(m_dat+20, 3, 'protocol_task() (libre)', 'FontSize', 11, 'Color', [0.4 0.4 0.4]);
 % UART
 nombres = {'A5','5A','A1','SEQ','P0','P1','P2','P3','CRC'};
 for k = 1:9
@@ -143,7 +143,7 @@ terminar(ax, filas, [-10 1150], [0.5 7], ...
 guardar(f, carpeta, 'fig1_periodo_1ms');
 
 %% Figura 2: rafaga de I y Q
-f = nueva_figura([100 100 1100 440]);
+f = nueva_figura([100 100 1000 440]);
 ax = gca; hold on;
 filas = {'RC2', 'ADPCH', 'Interrupción', 'ADC', 'Timer0'};
 senal_digital([-5 0; 0 1; 1 0], 5, 110);
@@ -159,33 +159,33 @@ bloque(isrQ_ini+2, 110, 2, gris, 'I');
 senal_digital([-5 0; isrI_ini+2.5 1; isrI_fin-1.5 0; isrQ_ini+2.5 1; isrQ_fin-1.5 0], 1, 110);
 plot([I_muestra I_muestra], [0.5 5.6], '--', 'Color', azul);
 plot([Q_muestra Q_muestra], [0.5 5.6], '--', 'Color', azul);
-text(I_muestra+0.5, 5.45, 'muestra I', 'Color', azul, 'FontSize', 8);
-text(Q_muestra+0.5, 5.45, 'muestra Q', 'Color', azul, 'FontSize', 8);
+text(I_muestra+0.5, 5.45, 'muestra I', 'Color', azul, 'FontSize', 11);
+text(Q_muestra+0.5, 5.45, 'muestra Q', 'Color', azul, 'FontSize', 11);
 cota(0, I_muestra, 4.5, sprintf('%.0f µs', t_acq));
 cota(I_muestra, Q_muestra, 5.85, sprintf('sesgo I-Q = %.0f µs', Q_muestra - I_muestra));
-cota(0, isrQ_fin, 0.45, sprintf('ráfaga completa = %.0f µs', isrQ_fin));
-text(I_adif-0.5, 3, sprintf('latencia %.2g µs \->', t_lat), 'HorizontalAlignment', 'right', 'FontSize', 8);
-terminar(ax, filas, [-5 110], [0 6.3], 'Figura 2. Adquisición, conversión e interrupciones de I y Q');
+cota(0, isrQ_fin, 0.2, sprintf('ráfaga completa = %.0f µs', isrQ_fin));
+text(I_adif-0.5, 3, sprintf('latencia %.2g µs \->', t_lat), 'HorizontalAlignment', 'right', 'FontSize', 11);
+terminar(ax, filas, [-5 110], [-0.1 6.3], 'Figura 2. Adquisición, conversión e interrupciones de I y Q');
 guardar(f, carpeta, 'fig2_rafaga_IQ');
 
 %% Figura 3: armado de la trama
-f = nueva_figura([100 100 1100 380]);
+f = nueva_figura([100 100 1000 380]);
 ax = gca; hold on;
 o = isrQ_ini;   % tiempo relativo al inicio de la ISR de Q
 filas = {'UART TX', 'main', 'Interrupción'};
 bloque(0, isrQ_fin-o, 3, naranja, '');
-text(isrQ_fin-o+2, 3.42, 'ISR Q', 'Color', naranja, 'FontSize', 8);
+text(isrQ_fin-o+2, 3.42, 'ISR Q', 'Color', naranja, 'FontSize', 11);
 bloque(m_ini-o, m_get-o, 2, claro(verde), '');
 bloque(m_get-o, m_spl-o, 2, 0.5*(verde+claro(verde)), '');
 bloque(m_spl-o, m_head-o, 2, claro(verde), '');
-bloque(m_head-o, m_crc-o, 2, verde, sprintf('crc8() sobre 6 bytes = %.0f µs', t_crc));
-bloque(m_crc-o, m_dat-o, 2, verde, sprintf('tx_DAT %.0f µs', t_txdat));
+bloque(m_head-o, m_crc-o, 2, verde, sprintf('crc8() = %.0f µs', t_crc));
+bloque(m_crc-o, m_dat-o, 2, verde, 'tx_DAT');
 text(m_ini-o, 1.45, sprintf('adc_iq_get %.0f µs | separar bytes %.1f µs | cabecera %.1f µs', ...
-     t_get, t_split, t_head), 'FontSize', 8);
+     t_get, t_split, t_head), 'FontSize', 11);
 for tt = [m_dat, m_dat+7, tx_ini+t_byte]
     bloque(tt-o, tt-o+t_txisr, 3, morado, '');
 end
-text(m_dat-o, 3.42, 'TX1IE = 1 -> sale el primer byte', 'Color', morado, 'FontSize', 8);
+text(m_dat-o, 3.42, 'TX1IE = 1 -> sale el primer byte', 'Color', morado, 'FontSize', 11);
 hex = {'A5', '5A', 'A1', '05'};
 for k = 1:4
     bloque(tx_ini-o+(k-1)*t_byte, tx_ini-o+k*t_byte, 1, claro(morado), hex{k});
@@ -195,7 +195,7 @@ terminar(ax, filas, [-5 600], [0.5 3.8], 'Figura 3. Conversión de datos y armad
 guardar(f, carpeta, 'fig3_armado_trama');
 
 %% Figura 4: un byte y la trama
-f = nueva_figura([100 100 1100 520]);
+f = nueva_figura([100 100 1000 520]);
 subplot(2,1,1); hold on;
 bits = [0 1 0 1 0 0 1 0 1 1];   % inicio, 0xA5 con el LSB primero, parada
 t = [-15, (0:9)*t_bit, 10*t_bit+15];
@@ -203,8 +203,8 @@ v = [1, bits, 1];
 stairs(t, v, 'k', 'LineWidth', 1.5);
 nom = {'inicio','D0','D1','D2','D3','D4','D5','D6','D7','parada'};
 for k = 1:10
-    text((k-0.5)*t_bit, 1.25, nom{k}, 'HorizontalAlignment', 'center', 'FontSize', 8);
-    text((k-0.5)*t_bit, -0.25, num2str(bits(k)), 'HorizontalAlignment', 'center', 'FontSize', 9, 'FontWeight', 'bold');
+    text((k-0.5)*t_bit, 1.25, nom{k}, 'HorizontalAlignment', 'center', 'FontSize', 11);
+    text((k-0.5)*t_bit, -0.25, num2str(bits(k)), 'HorizontalAlignment', 'center', 'FontSize', 12, 'FontWeight', 'bold');
     plot([(k-1) (k-1)]*t_bit, [-0.4 1.4], ':', 'Color', [0.7 0.7 0.7]);
 end
 ylim([-0.6 1.6]); xlim([-15 10*t_bit+15]);
@@ -217,7 +217,7 @@ hex = {'A5','5A','A1','05','08','00','08','03','02'};
 cam = {'sync','sync','TYPE','SEQ','I alto','I bajo','Q alto','Q bajo','CRC'};
 for k = 1:9
     bloque((k-1)*t_byte, k*t_byte, 1, claro(morado), hex{k});
-    text((k-0.5)*t_byte, 0.55, cam{k}, 'HorizontalAlignment', 'center', 'FontSize', 8);
+    text((k-0.5)*t_byte, 0.55, cam{k}, 'HorizontalAlignment', 'center', 'FontSize', 11);
 end
 cota(0, 9*t_byte, 1.45, sprintf('9 bytes = %.1f µs', 9*t_byte));
 xlim([-10 9*t_byte+10]); ylim([0.3 1.8]);
@@ -229,7 +229,7 @@ guardar(f, carpeta, 'fig4_byte_trama');
 
 %% Figura 5: ASCII contra binario
 t_dec = 95; t_arm = 10; t_len = 30; t_dat15 = 75;    % [ESTIMADO]
-f = nueva_figura([100 100 1100 400]);
+f = nueva_figura([100 100 1000 400]);
 ax = gca; hold on;
 filas = {'UART binario', 'main ASCII', 'UART ASCII', 'Timer0'};
 senal_digital([0 0 ;0 1; 1 0; 1000 1; 1001 0; 2000 1; 2001 0], 4, 2250);
@@ -242,17 +242,17 @@ txt = {'I',':','2','0','4','8',',','Q',':','2','0','5','1','CR','LF'};
 for k = 1:15
     bloque(a1+(k-1)*t_byte, a1+k*t_byte, 3, claro(morado), txt{k});
 end
-text(a1+15*t_byte+15, 3, sprintf('15 bytes = %.0f µs > Ts', 15*t_byte), 'FontSize', 8);
+text(a1+15*t_byte+15, 3, sprintf('15 bytes = %.0f µs > Ts', 15*t_byte), 'FontSize', 11);
 for p = [0 1000]
     for k = 1:9
         bloque(p+tx_ini+(k-1)*t_byte, p+tx_ini+k*t_byte, 1, claro(morado), '');
     end
 end
-text(tx_ini+4.5*t_byte, 1, sprintf('trama binaria %.0f µs', t_trama), 'HorizontalAlignment', 'center', 'FontSize', 8);
+text(tx_ini+4.5*t_byte, 1, sprintf('trama binaria %.0f µs', t_trama), 'HorizontalAlignment', 'center', 'FontSize', 11);
 for p = [1000 2000]
     plot([p p], [0.5 4.5], 'k:');
 end
-text(a, 2.45, sprintf('a_decimal(I) + a_decimal(Q) + armar línea = %.0f µs', a1-a), 'FontSize', 8, 'Color', verde);
+text(a, 2.45, sprintf('a_decimal(I) + a_decimal(Q) + armar línea = %.0f µs', a1-a), 'FontSize', 11, 'Color', verde);
 terminar(ax, filas, [-10 2250], [0.4 4.6], 'Figura 5. Línea ASCII (Serial Plotter) contra trama binaria');
 guardar(f, carpeta, 'fig5_ascii_binario');
 
@@ -262,6 +262,12 @@ end
 % ------------------------------------------------------------------------
 function f = nueva_figura(pos)
 f = figure('Color', 'w', 'Position', pos);
+% MATLAB R2025a o más nuevo con tema oscuro: forzar tema claro para que los
+% nombres de las filas y los ejes se vean (y salgan bien en el PNG).
+try
+    set(f, 'Theme', 'light');
+catch
+end
 end
 
 function bloque(x0, x1, y, color, texto)
@@ -269,7 +275,7 @@ function bloque(x0, x1, y, color, texto)
 h = 0.55;
 rectangle('Position', [x0, y-h/2, x1-x0, h], 'FaceColor', color, 'EdgeColor', 'k', 'LineWidth', 0.5);
 if ~isempty(texto)
-    text((x0+x1)/2, y, texto, 'HorizontalAlignment', 'center', 'FontSize', 8, 'Clipping', 'on');
+    text((x0+x1)/2, y, texto, 'HorizontalAlignment', 'center', 'FontSize', 11, 'Clipping', 'on');
 end
 end
 
@@ -285,11 +291,11 @@ function cota(x0, x1, y, texto)
 plot([x0 x1], [y y], 'k-', 'LineWidth', 0.6);
 plot([x0 x0], [y-0.08 y+0.08], 'k-', 'LineWidth', 0.6);
 plot([x1 x1], [y-0.08 y+0.08], 'k-', 'LineWidth', 0.6);
-text((x0+x1)/2, y+0.04, texto, 'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', 'FontSize', 8);
+text((x0+x1)/2, y+0.04, texto, 'HorizontalAlignment', 'center', 'VerticalAlignment', 'bottom', 'FontSize', 11);
 end
 
 function terminar(ax, filas, xl, yl, titulo)
-set(ax, 'YTick', 1:numel(filas), 'YTickLabel', filas, 'FontSize', 9);
+set(ax, 'YTick', 1:numel(filas), 'YTickLabel', filas, 'FontSize', 12);
 xlim(xl); ylim(yl);
 grid on; box on;
 xlabel('tiempo (µs)');
