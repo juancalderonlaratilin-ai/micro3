@@ -256,7 +256,7 @@ Si resultara ser A1/A2, la regla "escribe `TX1REG` solo cuando `TX1IF = 1`" ya c
 
 ## 9. Fase 2 (resumen; falta lectura detallada)
 
-### 9.1 PWM para el auto-cero (I0 / Q0)
+### 9.1 PWM6 / PWM7 (reconstrucción de I y Q en Micro 3; el auto-cero I0/Q0 pasa a Macro)
 
 | Dato | Valor | Fuente |
 |---|---|---|
@@ -270,6 +270,8 @@ Si resultara ser A1/A2, la regla "escribe `TX1REG` solo cuando `TX1IF = 1`" ya c
 | Pin | hay que **limpiar el bit TRIS** y enrutar con `RxyPPS` | DS cap. 24 |
 
 Ejemplo ⚠️: con Fosc = 16 MHz, `T2PR = 255`, prescaler 1:1 → período = 256 × 4 × 62,5 ns = **64 µs (15,6 kHz)** con **10 bits de resolución** (4 × 256 = 1024 pasos). El filtro RC de salida debe atenuar bien esa frecuencia.
+
+**Nombres comprobados en `pic16f18426.h` de XC8 2.40 (2026-11-04, T-06):** `PWM6CON`, `PWM6DCH`, `PWM6DCL`, `PWM7CON`, `PWM7DCH`, `PWM7DCL`, `T2CON`, `T2CLKCON`, `T2HLT`, `T2PR`, `T2TMR`, `RA2PPS`, `RA4PPS`, `RC2PPS`, `CCPTMRS1` (campos `P6TSEL`, `P7TSEL`) y los bits `LATA2/4`, `ANSA2/4`, `TRISA2/4`: todos existen (fuente: el `.h`; `pwm.c` compila sin errores). **No** se comprobó en el `.h` el valor de reset de `CCPTMRS1` ni los códigos PPS `0x0D`/`0x0E`: vienen del datasheet (p.346 y p.233) y siguen sin probar en el chip.
 
 ### 9.2 ADC (ADCC, DS cap. 32) [VERIFICADO en el DS, con páginas; lo no probado en el chip se marca]
 
@@ -298,7 +300,7 @@ Con VDD = 3,7 V y I/Q centradas en ~1,85 V, cada cuenta vale 0,903 mV (3,7 V / 4
 
 ### 9.3 Timer2/4/6 (8 bits) como base de tiempo con interrupción [VERIFICADO en T-05]
 
-Los temporizadores pares (Timer2, 4 y 6) son el mismo módulo con los mismos registros: lo que dice el DS del Timer2 vale para los otros (DS cap. 20, p.285). En T-05 el parpadeo de prueba usa **Timer4** y deja Timer2 para el PWM del auto-cero.
+Los temporizadores pares (Timer2, 4 y 6) son el mismo módulo con los mismos registros: lo que dice el DS del Timer2 vale para los otros (DS cap. 20, p.285). En T-05 el parpadeo de prueba usa **Timer4** y deja Timer2 para el PWM6/PWM7 (hoy, reconstrucción de I y Q, `pwm.c`).
 
 | Dato | Valor | Fuente |
 |---|---|---|
@@ -334,7 +336,7 @@ Cuenta que se usó en T-05 (código ya retirado el 2026-10-21): Fosc 16 MHz → 
 
 | Punto de la especificación | Estado tras leer los documentos |
 |---|---|
-| PWM de auto-cero en "PWM3/PWM4" | **Corregir:** en este chip son **PWM6/PWM7** (o CCP1–4) |
+| PWM en "PWM3/PWM4" | **Corregir:** en este chip son **PWM6/PWM7** (o CCP1–4) |
 | Código PPS de TX | **`RC4PPS = 0x0F`** (verificado) |
 | Pines RC4/RC5 para TX/RX | **Válidos.** RX1 viene por defecto en RC5; hay que bajar `ANSELC4/5` |
 | `LVP` "desactivado con SNAP" | **Error mío:** debe quedar **habilitado (`LVP = 1`)** |
@@ -351,7 +353,7 @@ Cuenta que se usó en T-05 (código ya retirado el 2026-10-21): Fosc 16 MHz → 
 - Capítulo 7 (Interrupts): latencia exacta y registros `PIR*`/`PIE*` restantes.
 - ADCC (cap. 32 en este datasheet): leído lo que usa T-09 (§9.2). Faltan los modos de cálculo (promedio, filtro, umbrales) y el CVD, que no se usan.
 - Timer2 (cap. 20): leído para T-05, ver §9.3. Falta `CCPTMRS` y cómo comparten Timer2 los dos PWM.
-- IOC (cap. 15) para el pulsador de auto-cero.
+- IOC (cap. 15) para el pulsador de auto-cero (pasa a Macro).
 - Especificaciones de BOR (`VBOR`) para elegir `BORV` con VDD = 3,7 V.
 - `CONFIG5` (protección de código) y `PMD` (apagar periféricos sin uso).
 - Cabecera real `pic16f18426.h` de la instalación de XC8 para confirmar los nombres en C.

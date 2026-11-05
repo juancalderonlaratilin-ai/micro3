@@ -2,6 +2,8 @@
 
 > **Propósito del documento**: Servir como especificación técnica completa y *prompt de contexto de sistema* para modelos de inteligencia artificial y desarrolladores de firmware. Contiene todos los requerimientos funcionales, arquitectónicos, fórmulas matemáticas y restricciones de diseño extraídos de las notas de laboratorio, tablero y sesiones de clase.
 
+> **Cambio de enfoque del profesor (2026-11-04), anotado por el equipo:** en Micro 3 el **auto-cero** (§3.1: PWM + filtro como trimmers de I0/Q0, botón y lazo de calibración, estado CALIBRATE de §4) **pasa a Macro**. En Micro 3, con las señales muestreadas por el ADC se controla **un PWM por canal** y con un **filtro pasa bajos** se vuelve a ver la señal analógica. El resto de este enunciado (ADC, Timers, UART no bloqueante, PC) sigue igual. Diseño actual: `MASTER_PLAN.md` y `docs/especificacion_pwm.md`.
+
 ---
 
 ## 1. Visión General del Proyecto

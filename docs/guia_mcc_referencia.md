@@ -111,7 +111,7 @@ Abre los `.c` y confirma que **estos valores cambiaron**. Si no, MCC no regener�
 | RC4 (TX) | `ANSELC=0x1F`: queda analógico | `ANSELC4=0` (digital) |
 | Lectura | `EUSART1_Read` y `Write` **bloquean** esperando | no bloquear: devolver `false`/sin dato |
 | Tamaño de buffers | 8/8 | 32 RX / 64 TX |
-| Formato de envío | solo bytes | líneas de texto `I:2048,Q:2051\r\n` (`docs/especificacion_protocolo.md`) |
+| Formato de envío | solo bytes | líneas de texto `2048,2051\r\n` (`docs/especificacion_protocolo.md`) |
 | `PPS1WAY` | ON | OFF (propuesto) |
 | Funciones | `EUSART1_*` | `tx_DAT(const char*, uint16_t)` y `tx_string(const char*)` |
 
@@ -138,7 +138,7 @@ Lo que **no** sirve o hay que hacer distinto (no copiar):
 | 2 | `EUSART1_RxDataHandler` **no comprueba si el buffer está lleno**: sigue escribiendo, pisa datos sin leer y `eusart1RxCount` puede pasar del tamaño | 240–248 | Pérdida silenciosa de bytes. Nosotros: si está lleno, descartar el byte y levantar una bandera de error |
 | 3 | Tras un overrun, el manejador alterna `CREN` y luego `EUSART1_ErrorHandler` llama a `RxDataHandler`, que lee `RC1REG` y **guarda ese byte como dato válido** | 226–262 | Puede entrar un byte falso. Qué contiene `RC1REG` tras alternar `CREN` no está verificado en el datasheet; no suponer |
 | 4 | Un error de trama (`FERR`) también guarda el byte como dato | 221–233 | Conviene contarlo: un byte con error de trama no debería pasar como dato |
-| 5 | Buffers de 8 bytes: no cabe una línea `I:4095,Q:4095\r\n` (15 bytes) en TX | 56–57 | Diseño: RX 32, TX 64 (pendiente de cambiarlo en MCC) |
+| 5 | Buffers de 8 bytes: no cabe una línea `4095,4095\r\n` (11 bytes) en TX | 56–57 | Diseño: RX 32, TX 64 (pendiente de cambiarlo en MCC) |
 | 6 | Dos `if` independientes serían más seguros que `else if` para TX/RX | `interrupt_manager.c` | El `else if` atiende primero TX; se arregla solo porque `TX1IF` baja al cargar un byte, pero no hay que depender de eso |
 | 7 | `main.c` generado **no activa** las interrupciones (`INTERRUPT_GlobalInterruptEnable` está comentado) | `main.c` | Con este `main`, nada de lo anterior funciona. Nosotros: `GIE` y `PEIE` en `system_init()` |
 | 8 | `OSCILLATOR_Initialize` escribe `OSCCON1` y sigue sin esperar `OSCCON3[ORDY]` | `mcc.c` | Nosotros esperamos `ORDY` antes de configurar la UART |

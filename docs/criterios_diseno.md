@@ -17,7 +17,7 @@ Proyecto Micro 3 · Enlace UART PC ↔ PIC (Fase 1) · Fecha: 2026-10-16 · Actu
 | 3 | Reloj | HFINTOSC interno a **16 MHz**, sin cristal | [PROPUESTA] |
 | 4 | Baud rate | **115200** (`SP1BRG = 34`, error −0,79 %) | [PROPUESTA] |
 | 5 | Formato de byte | **8N1** (8 datos, sin paridad, 1 parada) | [PROPUESTA] |
-| 6 | Formato de envío | **Texto ASCII**: una línea `I:xxxx,Q:xxxx\r\n` cada 2 pares = 500 líneas/s. El PIC no recibe comandos | decisión de la persona (2026-11-04) |
+| 6 | Formato de envío | **Texto ASCII**: una línea `xxxx,xxxx\r\n` (I,Q) cada 2 pares = 500 líneas/s. El PIC no recibe comandos | decisión de la persona (2026-11-04) |
 | 7 | Buffers | Circulares (cabeza y cola): RX de 32 bytes, TX de 64 bytes. Motivos en §6.1 | [PROPUESTA] |
 | 8 | Interrupciones | RX siempre activa. TX solo mientras haya datos. Una sola ISR | [VERIFICADO] |
 | 9 | Pines UART | TX = RC4 (pin 6), RX = RC5 (pin 5) | [PROPUESTA] |
@@ -76,14 +76,14 @@ Proyecto Micro 3 · Enlace UART PC ↔ PIC (Fase 1) · Fecha: 2026-10-16 · Actu
 
 **Criterios para escoger 115200**
 
-| Baud | µs por byte | Bytes/s | Uso de la línea con 7500 B/s |
+| Baud | µs por byte | Bytes/s | Uso de la línea con 5500 B/s |
 |---|---|---|---|
-| 9600 | 1041,7 | 960 | **781 %: no cabe** |
-| 19200 | 520,8 | 1920 | **391 %: no cabe** |
-| 57600 | 173,6 | 5760 | **130 %: no cabe** |
-| **115200** | **86,8** | **11 520** | **65 %** |
+| 9600 | 1041,7 | 960 | **573 %: no cabe** |
+| 19200 | 520,8 | 1920 | **286 %: no cabe** |
+| 57600 | 173,6 | 5760 | **95 %: sin margen** |
+| **115200** | **86,8** | **11 520** | **48 %** |
 
-- 7500 B/s = 500 líneas/s × 15 bytes (`I:4095,Q:4095\r\n`). 115200 es el único baud estándar de la tabla en que cabe. Ni a 115200 caben 1000 líneas/s (15 000 B/s = 130 %): por eso se manda 1 de cada 2 pares (`docs/especificacion_protocolo.md` §2).
+- 5500 B/s = 500 líneas/s × 11 bytes (`4095,4095\r\n`). 115200 es el único baud estándar de la tabla en que cabe con margen. A 115200, 1000 líneas/s (11 000 B/s = 96 %) cabrían apenas: por eso se manda 1 de cada 2 pares (`docs/especificacion_protocolo.md` §2).
 - 115200 es un baud **estándar**: lo aceptan todas las terminales y adaptadores. Un valor raro (como los 125 000 que da el código MCC de clase) solo lo aceptan algunos.
 - A 115200 la ISR tiene 86,8 µs (≈347 ciclos) por byte. Sobra para una ISR corta.
 - **Plazo de RX:** el receptor tiene solo 2 bytes de FIFO. Si llega completo un tercer byte sin que se haya leído `RC1REG` hay overrun. A 115200 son unos 174 µs.
@@ -100,7 +100,7 @@ reposo ‾‾‾|START|D0|D1|D2|D3|D4|D5|D6|D7|STOP|‾‾‾ reposo
 | Elemento | Escogido | Por qué |
 |---|---|---|
 | Bits de datos | 8 | Es lo estándar; el texto ASCII usaría 7, pero todas las terminales y LabVIEW esperan 8 |
-| Paridad | ninguna | Detecta solo errores de 1 bit y cuesta 10 % de la línea, que va al 65 %. Una línea dañada casi siempre pierde la forma `I:número,Q:número` y el PC la descarta |
+| Paridad | ninguna | Detecta solo errores de 1 bit y cuesta 10 % de la línea, que va al 48 %. Una línea dañada casi siempre pierde la forma `número,número` y el PC la descarta |
 | Bits de parada | 1 | Suficiente. Con 2 se da más tiempo a un receptor lento, aquí no hace falta |
 
 ---
@@ -110,9 +110,9 @@ reposo ‾‾‾|START|D0|D1|D2|D3|D4|D5|D6|D7|STOP|‾‾‾ reposo
 | Decisión | Valor | Por qué |
 |---|---|---|
 | Representación | Texto ASCII | Decisión de la persona (2026-11-04): se lee directo en una terminal, en el Serial Plotter y en LabVIEW con *VISA Read* + *Scan From String*. El receptor de la trama binaria en LabVIEW resultó muy largo. Es lo que sugiere el enunciado |
-| Línea | `I:xxxx,Q:xxxx\r\n`, códigos de 0 a 4095 en decimal | `nombre:valor` es lo que entiende el Serial Plotter; `\n` permite leer línea por línea |
-| Longitud | hasta 15 bytes (15 con 4 cifras en los dos canales) | El fin de línea marca dónde termina; no hace falta largo fijo |
-| Líneas por segundo | 500 (1 de cada 2 pares, `ADC_PARES_POR_LINEA` = 2) | Una línea tarda 1,31 ms: no cabe una por cada par de 1 ms. Con 500/s la línea va al 65,6 % |
+| Línea | `xxxx,xxxx\r\n`: primero I, después Q, códigos de 0 a 4095 en decimal, sin nombres | Números separados por coma los entiende el Serial Plotter y se separan fácil en LabVIEW (`%d,%d`); sin nombres la línea es más corta (11 bytes en vez de 15). `\n` permite leer línea por línea |
+| Longitud | hasta 11 bytes (11 con 4 cifras en los dos canales) | El fin de línea marca dónde termina; no hace falta largo fijo |
+| Líneas por segundo | 500 (1 de cada 2 pares, `ADC_PARES_POR_LINEA` = 2) | Una línea tarda 0,96 ms: una por cada par de 1 ms ocuparía el 96 %, sin margen. Con 500/s la línea va al 48,1 % (cumple el < 50 % de la prueba 6.6) |
 | Verificación | Solo la forma de la línea | No hay suma de verificación ni número de secuencia; con 8N1 sin paridad, un byte dañado casi siempre rompe la forma |
 | Sentido | Solo PIC → PC | El PIC empieza a mandar al encender; no hay comandos |
 
@@ -142,14 +142,14 @@ reposo ‾‾‾|START|D0|D1|D2|D3|D4|D5|D6|D7|STOP|‾‾‾ reposo
 | Dato | Valor |
 |---|---|
 | Tiempo por byte | 86,8 µs |
-| Línea `I:4095,Q:4095\r\n` (15 bytes) | 1,3 ms |
+| Línea `4095,4095\r\n` (11 bytes) | 0,96 ms |
 | Capacidad útil de un buffer de N bytes | N − 1 (se considera lleno cuando `head + 1 == tail`, sin contador extra) |
 
-| Buffer | Tamaño | Capacidad útil | Líneas de 15 B que caben | Tiempo de línea que cubre |
+| Buffer | Tamaño | Capacidad útil | Líneas de 11 B que caben | Tiempo de línea que cubre |
 |---|---|---|---|---|
 | MCC de clase (RX y TX) | 8 | 7 | 0 | 0,6 ms |
 | **RX** | **32** | 31 | — (hoy no se usa) | 2,7 ms |
-| **TX** | **64** | 63 | 4 | 5,5 ms |
+| **TX** | **64** | 63 | 5 | 5,5 ms |
 
 **Por qué 32 en RX**
 - Hoy el PIC no recibe comandos: el buffer de RX solo se llena si el PC manda algo, y nadie lo lee. Se deja el tamaño por si se agregan comandos de texto (T-07).
@@ -157,16 +157,16 @@ reposo ‾‾‾|START|D0|D1|D2|D3|D4|D5|D6|D7|STOP|‾‾‾ reposo
 - Aquí el buffer es el segundo escalón: el hardware solo tiene una FIFO de 2 bytes, y la ISR debe vaciarla en menos de unos 174 µs.
 
 **Por qué 64 en TX**
-- El PIC es el que más habla: 15 bytes cada 2 ms (7500 B/s, el 65,6 % de la línea). Una línea tarda 1,31 ms en salir, así que al llegar la siguiente el buffer ya está vacío.
-- 63 bytes útiles son 4 líneas completas: aguanta que `main` se atrase varias líneas sin que `tx_string` devuelva `false`.
-- Si una ráfaga lo llenara, entran 7,5 B/ms y salen 11,4, así que se vacía a ≈ 3,9 B/ms: ≈ 16 ms [CÁLCULO].
+- El PIC es el que más habla: 11 bytes cada 2 ms (5500 B/s, el 48,1 % de la línea). Una línea tarda 0,96 ms en salir, así que al llegar la siguiente el buffer ya está vacío.
+- 63 bytes útiles son 5 líneas completas: aguanta que `main` se atrase varias líneas sin que `tx_string` devuelva `false`.
+- Si una ráfaga lo llenara, entran 5,5 B/ms y salen 11,4, así que se vacía a ≈ 5,9 B/ms: ≈ 11 ms [CÁLCULO].
 
 **Por qué potencia de 2**
 - El índice se envuelve con `idx = (idx + 1) & (N - 1)`: una operación. Con un tamaño cualquiera habría que usar `%`, que en un PIC16 sin divisor por hardware lo resuelve una rutina de software más lenta, y esto corre dentro de la ISR.
 - Los índices de 8 bits se leen y escriben en una sola instrucción, así que no se corrompen si la ISR interrumpe a `main` a mitad de lectura.
 
 **Por qué no más grandes**
-- Cuestan RAM: 32 + 64 = 96 bytes de 2048 (4,7 %). Sobra margen, pero la Fase 2 también necesita datos de I y Q, variables del auto-cero y el parser.
+- Cuestan RAM: 32 + 64 = 96 bytes de 2048 (4,7 %). Sobra margen, pero la Fase 2 también necesita datos de I y Q, las variables del PWM de reconstrucción.
 - Un buffer más grande solo esconde un problema de tiempo: si `main` tarda tanto que se llena, el defecto es la tarea larga, no el buffer.
 
 **Qué pasa cuando se llena**
@@ -174,7 +174,7 @@ reposo ‾‾‾|START|D0|D1|D2|D3|D4|D5|D6|D7|STOP|‾‾‾ reposo
 | Buffer | Comportamiento |
 |---|---|
 | RX lleno | La ISR descarta el byte nuevo y marca la bandera de overflow. No se pisa un dato sin leer |
-| TX lleno | `tx_DAT` y `tx_string` devuelven `false`. `adc_ascii_task` descarta la línea y la cuenta en `adcLineasPerdidas` |
+| TX lleno | `tx_DAT` y `tx_string` devuelven `false`. `adc_ascii_par` descarta la línea y la cuenta en `adcLineasPerdidas` |
 
 **Cuándo revisar el tamaño:** si la línea crece, si se mandan más líneas por segundo, o si se agregan comandos y una prueba mide que `main` tarda más de 2,7 ms sin atender el RX. Regla: TX ≥ (líneas por ráfaga × bytes por línea) + 1; RX ≥ (tiempo máximo sin leer ÷ 86,8 µs) + 1.
 
@@ -186,7 +186,7 @@ reposo ‾‾‾|START|D0|D1|D2|D3|D4|D5|D6|D7|STOP|‾‾‾ reposo
 
 ## 7. Pines y niveles lógicos
 
-**Presupuesto:** se usan 8 pines (TX, RX, LED, I, Q, PWM de I0, PWM de Q0, pulsador) y sobra 1 (RC2, pin de prueba). RA0, RA1 y RA3 se dejan para el programador SNAP. Detalle en la §3 de la especificación.
+**Presupuesto:** se usan TX, RX, I, Q, PWM de I (RA2) y PWM de Q (RA4); RC2 saca la salida del Timer0 (pin de prueba). El LED y el pulsador de auto-cero eran del diseño anterior: el pulsador pasa a Macro (2026-11-04). RA0, RA1 y RA3 se dejan para el programador SNAP. Detalle en la §3 de la especificación.
 
 **Niveles con VDD = 3,7 V**
 
@@ -266,12 +266,14 @@ Fuente de los niveles del CP2102: datasheet del CP2102-GMR (Silicon Labs), secci
 | 2026-10-16 | TX del PIC pasa por un divisor | El datasheet del CP2102-GMR no describe sus entradas como tolerantes a 5 V, y el máximo es VIO + 0,5 V. Antes se suponía que sí toleraban 5 V |
 | 2026-10-19 | Documentados los motivos del tamaño de los buffers (§6.1): RX 32, TX 64, potencia de 2, comportamiento al llenarse | La revisión de `eusart1.c` de MCC mostró que 8 bytes son muy pocos y que su RX no controla el desborde |
 | 2026-10-21 | Se escoge una trama binaria con suma de verificación para el enlace | Decisión de la persona. **Reemplazada el 2026-11-04** por el texto ASCII |
-| 2026-10-21 | El PWM de auto-cero usa los **10 bits directos** (sin dithering ni divisor); el residuo de hasta ±20 cuentas se resta después por software. Detalle y motivos en `docs/especificacion_pwm.md` §2 y §9 (D-1) | Decisión de la persona; paso de 3,61 mV en I0 y 36 mV en la salida |
+| 2026-10-21 | El PWM de auto-cero usa los **10 bits directos** (sin dithering ni divisor); el residuo de hasta ±20 cuentas se resta después por software. Detalle en `docs/macro_autocero_pwm.md` (pasa a Macro el 2026-11-04; los 10 bits se conservan en el PWM de reconstrucción) | Decisión de la persona; paso de 3,61 mV en I0 y 36 mV en la salida |
 | 2026-10-21 | El cálculo del filtro RC del PWM (valores de R y C) se **aplaza** | Decisión de la persona; T-06 no lo necesita para empezar |
 | 2026-10-30 | **SINAD del ADC > 60 dB** como requisito de diseño | Decisión de la persona. Condiciones de medición en `docs/especificacion_adc.md` §6 [PROPUESTA] |
 | 2026-10-30 | Se documenta el ADC de T-09: muestreo de 1 kHz por Timer0 y promedio de 5 | El código ya existía (zip del 2026-10-30); se documentó lo que hace. No hubo cambio de diseño |
 | 2026-11-03 | **Se quita el promedio del ADC** (antes 5 pares, D-1): cada par lleva una sola muestra de I y de Q | Decisión de la persona. Se pierde la mejora de ruido del promedio (hasta 7 dB) |
-| 2026-11-04 | **Solo texto ASCII**: el PIC manda `I:xxxx,Q:xxxx\r\n` cada 2 pares (500 líneas/s, 65,6 % de la línea) y no recibe comandos. Se borran `crc8.*` y `protocol.*`, se retira T-04 y `adc_prueba.*` pasa a `adc_ascii.*` (§5) | Decisión de la persona: el receptor de la trama binaria en LabVIEW era muy largo; el texto se lee con *VISA Read* + *Scan From String*. Costo: fs = 500 Hz en el PC, sin detección de líneas perdidas, sin comandos (T-07 por replantear) |
+| 2026-11-04 | **Solo texto ASCII**: el PIC manda `xxxx,xxxx\r\n` cada 2 pares (500 líneas/s, 48,1 % de la línea) y no recibe comandos. Se borran `crc8.*` y `protocol.*`, se retira T-04 y `adc_prueba.*` pasa a `adc_ascii.*` (§5) | Decisión de la persona: el receptor de la trama binaria en LabVIEW era muy largo; el texto se lee con *VISA Read* + *Scan From String*. Costo: fs = 500 Hz en el PC, sin detección de líneas perdidas, sin comandos (T-07 por replantear) |
+| 2026-11-04 | La línea pierde los nombres: de `I:2048,Q:2051\r\n` (15 bytes) a `2048,2051\r\n` (11 bytes; primero I, después Q). Con 500 líneas/s la línea pasa del 65,6 % al **48,1 %** | Decisión de la persona: ver solo los valores. Cumple el < 50 % de la prueba 6.6. El PC depende del orden de los números |
+| 2026-11-04 | **Cambio de enfoque del profesor:** en Micro 3, un PWM por canal reproduce las muestras del ADC (`duty = (código + 2) >> 2`, PWM6 en RA2 y PWM7 en RA4, Timer2 con `T2PR` = 255) y un filtro pasa bajos de ≈ 100 Hz devuelve la señal analógica (`docs/especificacion_pwm.md`). El auto-cero con PWM (I0/Q0, pulsador, lazo) pasa a Macro (`docs/macro_autocero_pwm.md`) | Decisión del profesor. Se conservan los pines, el Timer2 y los 10 bits ya decididos |
 
 
 ---

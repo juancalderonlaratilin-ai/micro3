@@ -1,6 +1,6 @@
 # Interfaz de mediciones del ADC (Python)
 
-`herramientas/interfaz_micro3.py` es una ventana que recibe las líneas de texto `I:2048,Q:2051` del PIC (500 por segundo, `docs/especificacion_protocolo.md`), muestra I y Q en vivo y calcula las mediciones del ADC: **SINAD, ENOB, SNR, THD, SFDR**, ruido rms, histograma de códigos y plano I-Q.
+`herramientas/interfaz_micro3.py` es una ventana que recibe las líneas de texto `2048,2051` del PIC (500 por segundo, `docs/especificacion_protocolo.md`), muestra I y Q en vivo y calcula las mediciones del ADC: **SINAD, ENOB, SNR, THD, SFDR**, ruido rms, histograma de códigos y plano I-Q.
 
 ## 1. Instalar y abrir
 

@@ -1,6 +1,6 @@
 # Diagramas de tiempo y plan del histograma del periodo
 
-Proyecto Micro 3 · 2026-11-04 · Firmware: ADC a 1 kHz sin promedio; envío en texto ASCII `I:xxxx,Q:xxxx\r\n`, una línea cada 2 pares (500 líneas/s) a 115200.
+Proyecto Micro 3 · 2026-11-04 · Firmware: ADC a 1 kHz sin promedio; envío en texto ASCII `xxxx,xxxx\r\n`, una línea cada 2 pares (500 líneas/s) a 115200.
 
 **Etiquetas:** **[DS]** = datasheet del PIC16F18426; **[CÁLCULO]** = cuenta exacta con los registros del código; **[ESTIMADO]** = cuenta aproximada de instrucciones de XC8 (no hay listado del código actual), hay que medirla. En el preinforme, lo [ESTIMADO] va como «previsto» hasta medirlo.
 
@@ -18,12 +18,12 @@ Proyecto Micro 3 · 2026-11-04 · Firmware: ADC a 1 kHz sin promedio; envío en 
 | Sesgo entre la muestra de I y la de Q | ≈ 46 µs (caso A) | [ESTIMADO] | |
 | `adc_iq_get()` y contar el par | ≈ 5 µs | [ESTIMADO] | |
 | **Conversión a decimal/ASCII** | ≈ 95 µs por valor de 4 cifras | [ESTIMADO] | `a_decimal()`: restas de 1000, 100, 10 y 1 |
-| Texto fijo (`I:`, `,Q:`, `\r\n`) | ≈ 10 µs | [ESTIMADO] | |
-| Encolar 15 bytes (`tx_string`) | ≈ 105 µs | [ESTIMADO] | largo de la cadena + copia |
-| **De «par listo» a «línea encolada»** | **≈ 310 µs** | [ESTIMADO] | solo cada 2 pares; en el otro tick, ≈ 5 µs |
+| Texto fijo (`,` y `\r\n`) | ≈ 5 µs | [ESTIMADO] | |
+| Encolar 11 bytes (`tx_string`) | ≈ 80 µs | [ESTIMADO] | largo de la cadena + copia |
+| **De «par listo» a «línea encolada»** | **≈ 280 µs** | [ESTIMADO] | solo cada 2 pares; en el otro tick, ≈ 5 µs |
 | Bit en la línea | 8,75 µs (8,68 µs a 115200 exactos) | [CÁLCULO] | `SP1BRG` = 34 → 114 286 baud |
 | Byte 8N1 (10 bits) | 87,5 µs | [CÁLCULO] | |
-| Línea `I:2048,Q:2051\r\n` (15 bytes) | **1312,5 µs** = 65,6 % de 2 ms | [CÁLCULO] | una por par (cada 1 ms) no cabe: 131 % |
+| Línea `2048,2051\r\n` (11 bytes) | **962,5 µs** = 48,1 % de 2 ms | [CÁLCULO] | una por par (cada 1 ms): 96 %, sin margen |
 | ISR de TX (una por byte) | ≈ 6 µs | [ESTIMADO] | |
 
 ## 2. Figuras
@@ -33,12 +33,12 @@ Proyecto Micro 3 · 2026-11-04 · Firmware: ADC a 1 kHz sin promedio; envío en 
 | `D1_periodo_2ms.png` | Dos periodos: Timer0, ADC, interrupciones, main, la línea en la UART y RC2 (salida del Timer0) |
 | `D2_rafaga_IQ.png` | Zoom de 0 a 110 µs: adquisición, conversión, latencia, ISR, cambio de canal, sesgo I–Q |
 | `D3_armado_linea.png` | `a_decimal` de I y de Q, texto fijo y `tx_string` |
-| `D4_byte_y_linea.png` | El byte `'I'` (0x49) bit a bit en 8N1 y la línea completa con cada byte en hexadecimal |
-| `D5_ocupacion_linea.png` | Una línea por par se atrasa 312 µs por línea; una cada 2 pares cabe |
+| `D4_byte_y_linea.png` | El byte `'2'` (0x32) bit a bit en 8N1 y la línea completa con cada byte en hexadecimal |
+| `D5_ocupacion_linea.png` | Una línea por par deja la UART ocupada el 96 %; una cada 2 pares, el 48 % |
 
 Se generan con `matlab/generar_diagramas_tiempo.m` (cómo: `como_se_hicieron_los_diagramas.md`). Las mismas imágenes están en `docs/informe/figuras/`.
 
-**Un detalle que muestra D1:** la línea de 1312,5 µs empieza unos 410 µs después del disparo y termina hacia los 1725 µs, así que sus ISR de TX caen encima de la ráfaga siguiente (la de 1000 µs). Si una coincide con la ISR de I, retrasa el arranque de Q unos 6 µs. Es la principal fuente de jitter de Q, y el histograma del §4 la debería mostrar.
+**Un detalle que muestra D1:** la línea de 962,5 µs empieza unos 380 µs después del disparo y termina hacia los 1345 µs, así que sus ISR de TX caen encima de la ráfaga siguiente (la de 1000 µs). Si una coincide con la ISR de I, retrasa el arranque de Q unos 6 µs. Es la principal fuente de jitter de Q, y el histograma del §4 la debería mostrar.
 
 ## 3. Cómo cambiar lo [ESTIMADO] por medido
 
@@ -46,8 +46,8 @@ Con un pin marcador y el osciloscopio:
 
 1. **ISR del ADC (pruebas 4.13 y 4.16):** `ADC_PIN_PRUEBA` = 1 en `adc_iq.h` (RC2 sube durante cada ISR). En la placa nueva RC2 es `EN_AZ_PIC`: medir con JP_AZEN en 1–2, en el pin 3 de JP_AZEN.
 2. **Periodo de muestreo (prueba 4.5):** `ADC_PIN_PRUEBA` = 2: RC2 saca la salida del Timer0, una cuadrada de 2 ms de periodo (cada flanco es un disparo).
-3. **Armado de la línea:** subir un pin al entrar a `adc_ascii_task()` cuando toca mandar y bajarlo al salir; para separar la conversión, otro pulso alrededor de `a_decimal()` en `adc_ascii.c`.
-4. **La línea en la UART:** osciloscopio en RC4 (TX): una ráfaga de 15 bytes de ≈ 1,31 ms cada 2 ms.
+3. **Armado de la línea:** subir un pin al entrar a `adc_ascii_par()` cuando toca mandar y bajarlo al salir; para separar la conversión, otro pulso alrededor de `a_decimal()` en `adc_ascii.c`.
+4. **La línea en la UART:** osciloscopio en RC4 (TX): una ráfaga de 11 bytes de ≈ 0,96 ms cada 2 ms.
 5. Alternativa sin osciloscopio: el *Stopwatch* del simulador de MPLAB X cuenta los ciclos exactos de una función.
 
 Tiempo = ancho del pulso. Con eso se reemplazan los valores de la tabla y se redibujan las figuras.
@@ -104,7 +104,7 @@ Para el instante de I, que lo fija el hardware, hace falta el método de respald
 **El VI de LabVIEW, paso a paso** (la base es `docs/guia_labview_paso_a_paso.md`):
 
 1. **VISA Configure Serial Port:** 115200, 8 bits, sin paridad, 1 de parada, sin control de flujo, **Enable Termination Char = True** y `termination char` = 10 (`\n`).
-2. **Bucle de lectura:** *VISA Read* (una línea por vuelta) y *Scan From String* con `I:%d,Q:%d`. Si falla, descartar la línea. Del segundo número: `periodo = Q − 2048 + 16000`. Repetir hasta tener 10 001 valores (20 s a 500 líneas/s).
+2. **Bucle de lectura:** *VISA Read* (una línea por vuelta) y *Scan From String* con `%d,%d`. Si falla, descartar la línea. Del segundo número: `periodo = Q − 2048 + 16000`. Repetir hasta tener 10 001 valores (20 s a 500 líneas/s).
 3. **Validez:** no hay número de secuencia; revisar en MPLAB X que `adcLineasPerdidas` quede en 0 y que no haya líneas malas.
 4. **Análisis:** quitar el primer valor, multiplicar por 62,5 para pasar a ns, y usar **Histogram.vi** (paleta *Mathematics → Probability & Statistics*) con un bin por cuenta (bins = máx − mín + 1), **Std Deviation and Variance.vi** para σ y **Mean.vi** para la media (debe dar 1 000 000 ns). Mostrarlo en un *XY Graph* y guardar con *Write Delimited Spreadsheet*.
 

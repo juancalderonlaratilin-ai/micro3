@@ -2,7 +2,7 @@
 """Receptor de las líneas ASCII de I y Q del PIC16F18426 (Micro 3).
 
 El PIC manda, sin que se le pida nada, 500 líneas por segundo así:
-    I:2048,Q:2051\r\n
+    2048,2051\r\n          (primero I, después Q)
 (I y Q son códigos del ADC de 0 a 4095; 1 código = 3,7 V / 4096 = 0,903 mV).
 
 Este programa:
@@ -31,7 +31,7 @@ import re
 import threading
 import time
 
-LINEA = re.compile(rb"I:(\d{1,5}),Q:(\d{1,5})\r?\n")
+LINEA = re.compile(rb"(?m)^(\d{1,5}),(\d{1,5})\r?\n")   # "I,Q" al inicio de una línea
 FS = 500.0                                   # líneas por segundo (ADC a 1 kHz, 1 de cada 2)
 VOLTIOS_POR_CUENTA = 3.7 / 4096              # 1 LSB = 0,903 mV
 
@@ -81,7 +81,7 @@ class PuertoSimulado:
             t = self.n / FS
             i = round(2048 + 1880 * math.sin(2 * math.pi * 20 * t))
             q = round(2048 + 1880 * math.cos(2 * math.pi * 20 * t))
-            self.salida += f"I:{i},Q:{q}\r\n".encode("ascii")
+            self.salida += f"{i},{q}\r\n".encode("ascii")
             self.n += 1
 
     @property
@@ -164,7 +164,7 @@ def crear_grafica(ventana, cola, deco, parar):
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Receptor de las líneas I:...,Q:... de Micro 3")
+    ap = argparse.ArgumentParser(description="Receptor de las líneas I,Q de Micro 3")
     ap.add_argument("puerto", nargs="?", help="puerto del CP2102, p. ej. COM5")
     ap.add_argument("--baud", type=int, default=115200)
     ap.add_argument("--muestras", type=int, default=0, help="parar al llegar a N (0 = parar a mano)")
@@ -197,7 +197,7 @@ def main():
 
     time.sleep(1.0)
     if not deco.i:
-        print("AVISO: no llega ninguna línea I:...,Q:... Revisa el COM, JP_TX y que el PIC esté programado.")
+        print("AVISO: no llega ninguna línea «I,Q». Revisa el COM, JP_TX y que el PIC esté programado.")
     else:
         print("Llegan líneas: el PIC está enviando.")
 

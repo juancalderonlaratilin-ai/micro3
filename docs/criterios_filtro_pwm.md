@@ -1,4 +1,6 @@
-# Criterios de diseño del filtro activo del PWM (I0 / Q0)
+# [MACRO] Criterios de diseño del filtro activo del PWM (I0 / Q0)
+
+> **Para Macro, no para Micro 3** (cambio de enfoque del profesor, 2026-11-04). Este filtro (fc ≈ 30 Hz, pensado para niveles de auto-cero I0/Q0 que casi no cambian) es del auto-cero de Macro (`docs/macro_autocero_pwm.md`). En Micro 3 el filtro tiene que dejar pasar la señal muestreada: ver `docs/especificacion_pwm.md` §6 (fc ≈ 100 Hz). El procedimiento de WEBENCH de este documento sirve igual cambiando la frecuencia de corte.
 
 Proyecto Micro 3 · Fase 2a · Fecha: 2026-11-04 · Estado: **PROPUESTA, sin aprobar**
 

@@ -1,6 +1,6 @@
 # Receptor en Python y cómo ver los datos en un Serial Plotter
 
-El PIC manda 500 líneas por segundo así: `I:2048,Q:2051\r\n` (formato: `docs/especificacion_protocolo.md`). Hay tres formas de verlas en el PC.
+El PIC manda 500 líneas por segundo así: `2048,2051\r\n` (formato: `docs/especificacion_protocolo.md`). Hay tres formas de verlas en el PC.
 
 ## 1. El programa `receptor_micro3.py`
 
@@ -61,15 +61,15 @@ CSV guardado en    : captura_micro3.csv
 
 ## 2. Ver los datos en un Serial Plotter
 
-Como el PIC ya manda texto con la forma `nombre:valor`, el Serial Plotter del Arduino IDE lo dibuja **directo, sin Python**:
+Como el PIC ya manda texto con dos números separados por coma, el Serial Plotter del Arduino IDE lo dibuja **directo, sin Python**:
 
 1. Arduino IDE → **Herramientas → Puerto** → el COM del CP2102.
 2. **Herramientas → Serial Plotter** y, abajo, la velocidad en **115200**.
-3. Verás dos curvas, **I** y **Q**, en códigos (de 0 a 4095).
+3. Verás dos curvas en códigos (de 0 a 4095): la 1 (`value 1`) es **I** y la 2 (`value 2`) es **Q**, porque la línea no trae nombres.
 
 A 500 líneas por segundo la gráfica corre rápido (el Serial Plotter muestra solo los últimos puntos). Para mirar una señal lenta con calma, en `adc_ascii.h` sube `ADC_PARES_POR_LINEA` (por ejemplo a 50 = 20 líneas/s) y vuelve a programar; para medir SINAD déjalo en 2.
 
-**SerialPlot** (programa aparte) también sirve:
+**SerialPlot** (programa aparte) también sirve, sin filtros, porque la línea ya son solo dos números (canal 1 = I, canal 2 = Q):
 
 | Opción | Valor |
 |---|---|
@@ -78,7 +78,6 @@ A 500 líneas por segundo la gráfica corre rápido (el Serial Plotter muestra s
 | Data Format | **ASCII** |
 | Number of channels | `2` |
 | Delimiter | **comma** |
-| Filter / formato | quitar `I:` y `Q:` (opción «Custom» o «Separator» según la versión) |
 
 ## 3. Si algo falla
 

@@ -8,9 +8,9 @@ Proyecto Micro 3 · Firmware `firmware/Micro_Firmware.X` · Fecha: 2026-10-16 ·
 
 ## 1. Alcance
 
-**Dentro de la Fase 1:** comunicación serie no bloqueante, con interrupciones. Se probó en los dos sentidos con un eco (2026-10-19). Desde el 2026-11-04 el envío es **solo texto ASCII y solo PIC → PC**: líneas `I:xxxx,Q:xxxx\r\n` (`docs/especificacion_protocolo.md`).
+**Dentro de la Fase 1:** comunicación serie no bloqueante, con interrupciones. Se probó en los dos sentidos con un eco (2026-10-19). Desde el 2026-11-04 el envío es **solo texto ASCII y solo PIC → PC**: líneas `xxxx,xxxx\r\n` (`docs/especificacion_protocolo.md`).
 
-**Fuera de la Fase 1** (se diseña después, pero los pines ya quedan reservados): lectura de I y Q con el ADC (**ya especificada en `docs/especificacion_adc.md`; el código de T-09 llegó en un zip el 2026-10-30 y está copiado a `firmware/`, sin probar**), PWM de auto-cero (I0/Q0), máquina de estados de calibración y la interfaz gráfica, que va **en el PC** (LabVIEW o Python), no en el PIC.
+**Fuera de la Fase 1** (se diseña después, pero los pines ya quedan reservados): lectura de I y Q con el ADC (**ya especificada en `docs/especificacion_adc.md`; el código de T-09 llegó en un zip el 2026-10-30 y está copiado a `firmware/`, sin probar**), PWM por canal que reconstruye I y Q con un filtro pasa bajos (cambio de enfoque del profesor, 2026-11-04; `docs/especificacion_pwm.md`) y la interfaz gráfica; el PWM de auto-cero (I0/Q0) y la calibración pasan a Macro. La interfaz gráfica, que va **en el PC** (LabVIEW o Python), no en el PIC.
 
 **Objetivo de la Fase 1:** demostrar que el PIC recibe y envía bytes sin pérdidas y sin bloquear el programa principal.
 
@@ -62,7 +62,7 @@ Registros: `SP1BRGH = 0`, `SP1BRGL = 34`. La fórmula (`Fosc / [4 × (n + 1)]` c
    - **Conversor → PIC:** un conversor a 3,3 V entrega ~3,3 V. Con VDD = 3,7 V, la entrada Schmitt (por defecto) exige VIH ≥ 0,8 × VDD = **2,96 V**, un margen justo. Con entrada TTL basta VIH ≥ 0,25 × VDD + 0,8 = **1,73 V**. **Decisión: configurar RC5 como TTL (`INLVLC5 = 0`)** [VERIFICADO: DS Tabla 39-4 y registro `INLVLC`, p.217].
    - **No** uses un conversor con salida a 5 V: la entrada del PIC no debe superar VDD + 0,3 V.
 3. **Tierra común** entre el conversor USB-serie y la placa.
-4. **Por qué 115200 y no 9600** (de cara a la Fase 2): se mandan 500 líneas/s de hasta 15 bytes = 7500 B/s (65,6 % de la línea a 114 286 baud). A 9600 baud solo cabrían 64 líneas/s. 115200 es el baud estándar más bajo en que cabe.
+4. **Por qué 115200 y no 9600** (de cara a la Fase 2): se mandan 500 líneas/s de hasta 11 bytes = 5500 B/s (48,1 % de la línea a 114 286 baud). A 9600 baud solo cabrían 87 líneas/s. 115200 es el baud estándar más bajo en que cabe.
 
 ---
 
@@ -79,9 +79,9 @@ Evitar los pines de programación (RA0 = ICSPDAT, RA1 = ICSPCLK, RA3 = MCLR) par
 | 2 | **RA5** | LED de estado (heartbeat / error) | **1** | salida digital (bajar `ANSELA5`). Opcional, muy útil para depurar |
 | 10 | RC0 | Entrada analógica canal I (ANC0) | 2 | **en uso** (T-09, sin probar) |
 | 9 | RC1 | Entrada analógica canal Q (ANC1) | 2 | **en uso** (T-09, sin probar) |
-| 11 | RA2 | PWM de I0 (auto-cero) | 2 | reservado. PWM6 vía PPS (`RA2PPS = 0x0D`) |
-| 3 | RA4 | PWM de Q0 (auto-cero) | 2 | reservado. PWM7 vía PPS (`RA4PPS = 0x0E`) |
-| 7 | RC3 | Pulsador de auto-cero (IOC, pull-up débil) | 2 | reservado |
+| 11 | RA2 | PWM de I (reconstrucción de la señal muestreada) | 2 | PWM6 vía PPS (`RA2PPS = 0x0D`), código en `pwm.c` (T-06) |
+| 3 | RA4 | PWM de Q (reconstrucción de la señal muestreada) | 2 | PWM7 vía PPS (`RA4PPS = 0x0E`), código en `pwm.c` (T-06) |
+| 7 | RC3 | Pulsador de auto-cero (IOC, pull-up débil) | — | **pasa a Macro** (2026-11-04); en Micro 3 queda libre |
 | 8 | RC2 | libre (reserva: pin de prueba para medir la ISR con el osciloscopio) | – | con `ADC_PIN_PRUEBA = 1` (`adc_iq.h`) sube mientras corre `adc_iq_isr()` |
 | 13 / 12 / 4 | RA0 / RA1 / RA3 | ICSPDAT / ICSPCLK / MCLR | – | programación, no usar. RA3 solo es entrada |
 | 1 / 14 | VDD / VSS | alimentación | – | con capacitor de desacople de 100 nF cerca |
@@ -95,18 +95,18 @@ Evitar los pines de programación (RA0 = ICSPDAT, RA1 = ICSPCLK, RA3 = MCLR) par
 | UART TX y RX | 2 | 1 |
 | LED de estado | 1 | 1 |
 | Canales I y Q (ADC) | 2 | 2 |
-| Auto-cero I0 y Q0 (PWM6 y PWM7 + filtro RC + buffer) | 2 | 2 |
-| Pulsador de auto-cero | 1 | 2 |
+| PWM de I y Q (PWM6 y PWM7 + filtro pasa bajos de reconstrucción) | 2 | 2 |
+| Pulsador de auto-cero (pasa a Macro) | 0 | — |
 | **Usados** | **8** | |
 | Libres para E/S (12 − RA0, RA1, RA3) | 9 | |
 | **Reserva** | **1** (RC2) | |
 
 Razones y consecuencias:
 
-- **Los trimmers I0/Q0 sustituidos por PWM** son los únicos elementos analógicos que el PIC controla. Según el preinforme, `V_out = Vref2 + 10·(I_LPF − I0)`, así que el PWM filtrado y con buffer ocupa el lugar del trimmer.
-- **La gráfica de impedancia no usa pines del PIC.** Los valores de I y Q viajan por la UART y el PC dibuja I (eje X) contra Q (eje Y). Cada par viaja como texto, `I:xxxx,Q:xxxx\r\n` (hasta 15 bytes, §8). A 500 líneas/s son 7500 B/s, el 65,6 % de la capacidad de la línea.
+- **Los PWM reproducen las señales muestreadas** (cambio de enfoque del profesor, 2026-11-04): cada par del ADC fija el duty de PWM6 (I) y PWM7 (Q), y un filtro pasa bajos de ≈ 100 Hz devuelve la señal analógica (`docs/especificacion_pwm.md`). La sustitución de los trimmers I0/Q0 por PWM (auto-cero) pasa a Macro.
+- **La gráfica de impedancia no usa pines del PIC.** Los valores de I y Q viajan por la UART y el PC dibuja I (eje X) contra Q (eje Y). Cada par viaja como texto, `xxxx,xxxx\r\n` (hasta 11 bytes, §8). A 500 líneas/s son 5500 B/s, el 48,1 % de la capacidad de la línea.
 - **Una pantalla local no cabe** en este chip salvo un OLED I2C quitando el LED (0 de reserva). Una pantalla SPI necesitaría 4–5 pines. Si el profe la pide, el reemplazo sin cambios de código es el **PIC16F18446** (20 pines, 18 E/S, 17 canales de ADC; mismo datasheet [VERIFICADO: DS p.14]).
-- **Sin cristal externo:** usaría RA4 (OSC2) y RA5 (OSC1), que aquí son el PWM de Q0 y el LED.
+- **Sin cristal externo:** usaría RA4 (OSC2) y RA5 (OSC1), que aquí son el PWM de Q y el LED.
 - **Debe respetarse RA0/RA1/RA3** para que el SNAP pueda programar y depurar.
 
 ---
@@ -125,7 +125,7 @@ Razones y consecuencias:
 | Timer0 | disparo del ADC cada 1 ms | 8 bits, Fosc/4, prescaler 1:16, `TMR0H = 249` (250 cuentas × 4 µs = 1000 µs) |
 | Bits de configuración | ver §11 | `LVP` habilitado, WDT desactivado en desarrollo, BOR activo |
 
-Periféricos de la Fase 2: el ADCC (2 canales, referencia VDD = 3,7 V; las salidas I y Q quedan centradas en ~1,85 V) y el Timer0 (disparo a 1 kHz) tienen código desde el 2026-10-30 (T-09, copiado a `firmware/`, sin probar). Siguen reservados: Timer 2 + **PWM6/PWM7** (auto-cero) e IOC (pulsador).
+Periféricos de la Fase 2: el ADCC (2 canales, referencia VDD = 3,7 V; las salidas I y Q quedan centradas en ~1,85 V) y el Timer0 (disparo a 1 kHz) tienen código desde el 2026-10-30 (T-09, copiado a `firmware/`, sin probar). Timer 2 + **PWM6/PWM7** ya se usan para reconstruir I y Q (T-06, `pwm.c`); el IOC del pulsador pasa a Macro.
 
 ---
 
@@ -140,7 +140,7 @@ Arquitectura guiada por eventos: las interrupciones solo capturan el evento y mu
 | E3 | Error de hardware en RX (framing u overrun) | `FERR` / `OERR` | Marca la bandera de error. El framing **no genera interrupción**: se detecta al leer el byte. Si hay overrun (`OERR`), se recupera con `CREN = 0` y luego `CREN = 1` |
 | E4 | FIFO de RX llena | la ISR no puede guardar | Descarta el byte y marca la bandera de overflow |
 | E5 | FIFO de TX llena | `uart_tx_*` no puede encolar | Devuelve `false` al llamador (no bloquea) |
-| E6 | Hay un par nuevo del ADC | `adc_iq_get()` en el programa principal | Cada 2 pares, `adc_ascii_task()` arma la línea `I:…,Q:…\r\n` y la encola con `tx_string()` |
+| E6 | Hay un par nuevo del ADC | `adc_iq_get()` en el programa principal | `pwm_desde_adc()` fija el duty de PWM6/PWM7; cada 2 pares, `adc_ascii_par()` arma la línea `I,Q\r\n` y la encola con `tx_string()` |
 | E8 | Terminó una conversión del ADC | `ADIF && ADIE` | `adc_iq_isr()` guarda I (o Q), arranca la conversión siguiente y deja el par listo (T-09) |
 
 ---
@@ -155,11 +155,12 @@ Arquitectura guiada por eventos: las interrupciones solo capturan el evento y mu
 | T4 | `uart_tx_DAT(const uint8_t *data, uint16_t size)` | llamada desde el programa principal | Encola un bloque de bytes. `true` si cupo todo, `false` si no (E5) |
 | T5 | `uart_tx_string(const char *s)` | llamada desde el programa principal | Igual que T4, para cadenas terminadas en `'\0'` (firma pedida en clase) |
 | T6 | `uart_rx_read(uint8_t *byte)` (`EUSART1_Read`) | llamada desde el programa principal | Saca un byte de la FIFO de RX. `false` si está vacía. Hoy no se usa |
-| T7 | `adc_ascii_task()` | bucle principal | Lee el par con `adc_iq_get`, cada 2 pares arma `I:…,Q:…\r\n` y lo encola (E6) |
+| T7 | `adc_ascii_par(i, q)` | bucle principal | Recibe el par que leyó `main` con `adc_iq_get`; cada 2 pares arma `I,Q\r\n` y lo encola (E6) |
+| T8 | `pwm_desde_adc(i, q)` | bucle principal | Con cada par, `duty = (código + 2) >> 2` en PWM6 (I) y PWM7 (Q) (E6, `docs/especificacion_pwm.md`) |
 | T9 | `adc_iq_isr()` | interrupción (E8) | Guarda I, arranca Q, guarda Q y deja el par listo (T-09) |
 | T10 | `adc_iq_get(&i, &q)` | llamada desde el programa principal | Entrega el último par (una muestra de I y una de Q, sin promedio) si hay uno nuevo; no espera (T-09) |
 
-**Bucle principal:** `while(1) { adc_ascii_task(); }`, sin esperas bloqueantes (prohibido `while(!TXIF)` y `__delay_ms` en la lógica).
+**Bucle principal:** `while(1) { if (adc_iq_get(&i, &q)) { pwm_desde_adc(i, q); adc_ascii_par(i, q); } }`, sin esperas bloqueantes (prohibido `while(!TXIF)` y `__delay_ms` en la lógica).
 
 **Una sola ISR:** el chip tiene un único vector de interrupción (`0x0004`) y no tiene prioridades. T2 y T3 son dos bloques dentro de la misma función `void __interrupt() isr(void)`, que comprueba **bandera y habilitación** de cada fuente y limpia (o consume) la bandera antes de salir. No se rehabilita `GIE` dentro de la ISR [VERIFICADO: UG §5.8]. Con T-09 se suma un tercer bloque, el del ADC (`ADIF` y `ADIE`), que `interrupt_manager.c` atiende después de TX y RX.
 
@@ -196,13 +197,13 @@ El PIC devolvía exactamente cada byte que recibía. Sirvió para validar cablea
 ### 8.2 Envío de datos: una línea de texto por par
 
 ```
-I:2048,Q:2051\r\n
+2048,2051\r\n
 ```
 
-- I y Q en decimal, de 0 a 4095, sin ceros a la izquierda; termina en `\r\n`. Hasta 15 bytes.
-- Una línea cada 2 pares del ADC = **500 líneas/s** (`ADC_PARES_POR_LINEA` en `adc_ascii.h`). Una de 15 bytes tarda 1,31 ms; la línea va al 65,6 %.
+- I y Q en decimal, de 0 a 4095, sin ceros a la izquierda; termina en `\r\n`. Hasta 11 bytes.
+- Una línea cada 2 pares del ADC = **500 líneas/s** (`ADC_PARES_POR_LINEA` en `adc_ascii.h`). Una de 11 bytes tarda 0,96 ms; la línea va al 48,1 %.
 - Solo PIC → PC. El PIC empieza a mandar al encender y no recibe comandos.
-- El PC lee hasta `\n` y separa con `I:%d,Q:%d`; una línea con otra forma se descarta.
+- El PC lee hasta `\n` y separa con `%d,%d`; una línea con otra forma se descarta.
 
 Detalle, cuentas y motivos: `docs/especificacion_protocolo.md` y `docs/criterios_diseno.md` §5.
 
@@ -214,7 +215,7 @@ Detalle, cuentas y motivos: `docs/especificacion_protocolo.md` y `docs/criterios
 |---|---|---|
 | P1 | Eco de 1 byte desde una terminal serie en hexadecimal | vuelve el mismo byte (pasó el 2026-10-19, con el código de eco de entonces) |
 | P2 | Ráfaga de 1000 bytes | vuelven los 1000 bytes sin pérdidas ni cambios (pasó el 2026-10-19) |
-| P3 | Líneas `I:…,Q:…` en una terminal | 500 líneas/s con la forma correcta (pruebas 2.1 y 2.2) |
+| P3 | Líneas `I,Q` en una terminal | 500 líneas/s con la forma correcta (pruebas 2.1 y 2.2) |
 | P4 | 10 minutos de captura | 0 líneas malas después de la primera y `adcLineasPerdidas` = 0 (prueba 2.4) |
 | P7 | Desconectar y reconectar el cable | el enlace se recupera sin reiniciar el PIC (prueba 2.5) |
 | P8 | **SINAD del ADC** con una senoidal de 5 Hz y otra de 20 Hz (1,7 V de amplitud, centrada en 1,85 V) en RC0 y RC1 | **SINAD > 60 dB** (prueba 4.15 de `docs/protocolos_prueba.md`) |

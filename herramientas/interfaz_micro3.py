@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Interfaz de mediciones para Micro 3 (PIC16F18426, envío en texto ASCII).
 
-Recibe por la UART las líneas "I:2048,Q:2051\r\n" que manda el PIC (adc_ascii.c, 500 por
+Recibe por la UART las líneas "2048,2051\r\n" (I,Q) que manda el PIC (adc_ascii.c, 500 por
 segundo), muestra I y Q en vivo y calcula las mediciones del ADC:
 
   * Senoidal: SINAD, ENOB, SNR, THD, SFDR, frecuencia y amplitud (método de
@@ -192,18 +192,18 @@ def analizar_periodo(cuentas):
 
 # ============================================================ decodificador de líneas ASCII
 
-LINEA_ASCII = re.compile(rb"I:(\d{1,5}),Q:(\d{1,5})\r?\n")
+LINEA_ASCII = re.compile(rb"(?m)^(\d{1,5}),(\d{1,5})\r?\n")   # "I,Q" al inicio de una línea
 
 
 class DecoAscii:
-    """Junta los bytes que llegan y saca de cada línea completa "I:2048,Q:2051\r\n" los
+    """Junta los bytes que llegan y saca de cada línea completa "2048,2051\r\n" (I,Q) los
     códigos de I y Q (0 a 4095). Una línea que llega cortada o con otra forma no se usa y se
     cuenta en lineas_malas (es la única revisión que hay: el texto no lleva suma de verificación)."""
 
     def __init__(self):
         self.texto = bytearray()
         self.i, self.q = [], []
-        self.lineas_malas = 0       # líneas que no tienen la forma I:xxxx,Q:xxxx
+        self.lineas_malas = 0       # líneas que no tienen la forma número,número
         self.t_primera = None       # hora de la primera muestra (para medir muestras/s)
 
     def alimentar(self, datos):
@@ -245,7 +245,7 @@ def fs_desde_tasa(tasa):
 # ============================================================ simulador (prueba sin PIC)
 
 class Simulador:
-    """Imita al PIC: muestrea a 1 kHz y manda una línea "I:...,Q:...\r\n" cada `cada` pares
+    """Imita al PIC: muestrea a 1 kHz y manda una línea "I,Q\r\n" cada `cada` pares
     (2 = 500 líneas/s, como adc_ascii.c).
     modo "senoidal": I y Q senoidales de 1,7 V de amplitud, ruido de 0,5 LSB rms y un 3.er
     armónico de −75 dBc (el SINAD esperado es ≈ 66 dB).  modo "continua": 1,85 V con ruido."""
@@ -277,7 +277,7 @@ class Simulador:
             if self.n % self.cada == 0:
                 t = self.n / FS_ADC
                 i, q = self._muestra(t, 0.0), self._muestra(t, math.pi / 2)
-                self.salida += f"I:{i},Q:{q}\r\n".encode()
+                self.salida += f"{i},{q}\r\n".encode()
             self.n += 1
 
     @property
@@ -311,7 +311,7 @@ PUERTO_SIM_DC = "SIMULADOR (continua 1,85 V)"
 class App:
     def __init__(self, raiz):
         self.raiz = raiz
-        raiz.title("Micro 3 — Receptor y mediciones del ADC (líneas ASCII I:…,Q:…)")
+        raiz.title("Micro 3 — Receptor y mediciones del ADC (líneas ASCII I,Q)")
         raiz.geometry("1350x820")
         self.deco = None
         self.puerto = None
@@ -524,7 +524,7 @@ class App:
                     elif max(b) <= 25:
                         aviso += (f"\n⚠ {nom} ≈ 0 V: no llega señal al pin.\n"
                                   "   Revisa J2/J7, JP_IN y JP_ADC.")
-            estado = "recibiendo" if n else "esperando líneas I:…,Q:…"
+            estado = "recibiendo" if n else "esperando líneas I,Q"
             self.var_estado.set(
                 f"{estado}\nmuestras: {n}   ({tasa:.0f} /s → fs = {self.fs:.0f} Hz)\n"
                 f"líneas malas: {d.lineas_malas}" + linea_cod + aviso)

@@ -60,7 +60,7 @@
 \vspace{0.6em}
 \begin{abstract}
 \noindent
-El PIC16F18426 digitaliza las componentes en fase ($I$) y en cuadratura ($Q$) que entrega la placa de demodulación y las envía a un PC por UART. Este documento reúne, en un solo lugar, \emph{qué} se escogió para el ADC y la UART y \emph{por qué}, con los cálculos mínimos de cada valor. Los datos viajan como texto ASCII, una línea \texttt{I:2048,Q:2051\textbackslash r\textbackslash n} por par. Resultado: muestreo de $I$ y $Q$ a \SI{1}{\kilo\hertz} disparado por hardware, enlace a \num{115200} baudios 8N1 y una línea cada dos pares (500 líneas/s), que ocupa el \SI{66}{\percent} de la línea; una línea por par exigiría el \SI{131}{\percent}.
+El PIC16F18426 digitaliza las componentes en fase ($I$) y en cuadratura ($Q$) que entrega la placa de demodulación y las envía a un PC por UART. Este documento reúne, en un solo lugar, \emph{qué} se escogió para el ADC y la UART y \emph{por qué}, con los cálculos mínimos de cada valor. Los datos viajan como texto ASCII, una línea \texttt{2048,2051\textbackslash r\textbackslash n} por par. Resultado: muestreo de $I$ y $Q$ a \SI{1}{\kilo\hertz} disparado por hardware, enlace a \num{115200} baudios 8N1 y una línea cada dos pares (500 líneas/s), que ocupa el \SI{48}{\percent} de la línea; una línea por par la dejaría al \SI{96}{\percent}, sin margen.
 \end{abstract}
 
 % ================================================================ I
@@ -82,7 +82,7 @@ La Tabla~\ref{tab:uart} resume cada decisión; abajo están los cálculos.
 \textbf{Parámetro} & \textbf{Elegido} & \textbf{Por qué} \\
 \midrule
 Modo & EUSART1 asíncrono, \textbf{8N1} & Estándar: lo acepta cualquier terminal, LabVIEW o Python sin configuración especial. \\
-Velocidad & \textbf{\num{115200} baud} (\num{114286} reales) & Es el baud estándar más bajo donde caben 500 líneas/s de 15 bytes: ocupan el \SI{66}{\percent}. A \num{9600}, \num{19200} y \num{57600} baud serían el \SI{781}{\percent}, el \SI{391}{\percent} y el \SI{130}{\percent}. \\
+Velocidad & \textbf{\num{115200} baud} (\num{114286} reales) & Es el baud estándar más bajo donde caben 500 líneas/s de 11 bytes: ocupan el \SI{48}{\percent}. A \num{9600} y \num{19200} baud serían el \SI{573}{\percent} y el \SI{286}{\percent}; a \num{57600}, el \SI{95}{\percent}, sin margen. \\
 Generador de baud & \texttt{BRGH}\,=\,1, \texttt{BRG16}\,=\,1, \texttt{SP1BRG}\,=\,34 & Error de \SI{-0.79}{\percent}; con el generador de 8 bits sería \SI{-3.55}{\percent}. \\
 Pines & TX = RC4, RX = RC5 (PPS) & No chocan con el ADC (RC0, RC1) ni con el programador (RA0, RA1, RA3). \\
 Nivel de RX & TTL (\texttt{INLVLC5}\,=\,0) & $V_{IH} = \SI{1.73}{\volt}$: \SI{1.57}{\volt} de margen con \SI{3.3}{\volt}. Con Schmitt serían \SI{2.96}{\volt}. \\
@@ -90,7 +90,7 @@ Capa física & 2 $\times$ SN74LVC1T45 & El CP2102 admite como máximo $V_{IO} + 
 Atención & Interrupción de TX & Nada espera: prohibidos \texttt{while(!TX1IF)} y \texttt{\_\_delay\_ms}. El RX queda configurado, pero el PIC no recibe comandos. \\
 Buffers & Circulares: RX \num{32} B, TX \num{64} B & Potencias de 2: el índice avanza con \texttt{(i+1)\,\&\,(N-1)}, sin división. TX guarda 4 líneas. \\
 Envío & \texttt{tx\_DAT()}, \texttt{tx\_string()} & Todo o nada: nunca sale media línea; si no cabe, devuelven \texttt{false} sin esperar. \\
-Formato & \textbf{Texto ASCII}, \texttt{I:xxxx,Q:xxxx\textbackslash r\textbackslash n} & Ver la sección~\ref{sec:formato}. \\
+Formato & \textbf{Texto ASCII}, \texttt{xxxx,xxxx\textbackslash r\textbackslash n} & Ver la sección~\ref{sec:formato}. \\
 \bottomrule
 \end{tabularx}
 \end{table}
@@ -160,22 +160,21 @@ Entrada al pin & \SI{1}{\kilo\ohm} en serie + \SI{10}{\nano\farad} a GND & Aísl
 \begin{table}[!htb]
 \caption{Línea de texto. Ejemplo: $I = 2048$, $Q = 2051$}
 \centering
-\setlength{\tabcolsep}{4.2pt}
-\begin{tabular}{@{}lccccccccccccccc@{}}
+\begin{tabular}{@{}lccccccccccc@{}}
 \toprule
-\textbf{Byte} & 0 & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8 & 9 & 10 & 11 & 12 & 13 & 14 \\
-\textbf{Carácter} & \texttt{I} & \texttt{:} & \texttt{2} & \texttt{0} & \texttt{4} & \texttt{8} & \texttt{,} & \texttt{Q} & \texttt{:} & \texttt{2} & \texttt{0} & \texttt{5} & \texttt{1} & CR & LF \\
-\textbf{Hex} & \texttt{49} & \texttt{3A} & \texttt{32} & \texttt{30} & \texttt{34} & \texttt{38} & \texttt{2C} & \texttt{51} & \texttt{3A} & \texttt{32} & \texttt{30} & \texttt{35} & \texttt{31} & \texttt{0D} & \texttt{0A} \\
+\textbf{Byte} & 0 & 1 & 2 & 3 & 4 & 5 & 6 & 7 & 8 & 9 & 10 \\
+\textbf{Carácter} & \texttt{2} & \texttt{0} & \texttt{4} & \texttt{8} & \texttt{,} & \texttt{2} & \texttt{0} & \texttt{5} & \texttt{1} & CR & LF \\
+\textbf{Hex} & \texttt{32} & \texttt{30} & \texttt{34} & \texttt{38} & \texttt{2C} & \texttt{32} & \texttt{30} & \texttt{35} & \texttt{31} & \texttt{0D} & \texttt{0A} \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \noindent
-$I$ y $Q$ van en decimal, de 0 a 4095, sin ceros a la izquierda: hasta 15 bytes por línea. \texttt{nombre:valor} separados por coma es el formato del Serial Plotter de Arduino. El PC lee hasta \texttt{\textbackslash n} y separa los números con \texttt{I:\%d,Q:\%d}; una línea con otra forma se descarta.
+$I$ y $Q$ van en decimal, de 0 a 4095, sin ceros a la izquierda: hasta 11 bytes por línea. Primero va $I$ y después $Q$, sin nombres: el orden dice cuál es cuál. Dos números separados por coma los dibuja directo el Serial Plotter de Arduino. El PC lee hasta \texttt{\textbackslash n} y separa los números con \texttt{\%d,\%d}; una línea con otra forma se descarta.
 
 \subsection{Cuántas líneas por segundo}
 
-Una línea de 15 bytes tarda $15 \times \SI{87.5}{\micro\second} = \SI{1312.5}{\micro\second}$, más que el periodo de muestreo. Por eso el PIC manda una línea cada dos pares (\texttt{ADC\_PARES\_POR\_LINEA}\,=\,2), como resume la Tabla~\ref{tab:ocup}.
+Una línea de 11 bytes tarda $11 \times \SI{87.5}{\micro\second} = \SI{962.5}{\micro\second}$, casi todo el periodo de muestreo. Por eso el PIC manda una línea cada dos pares (\texttt{ADC\_PARES\_POR\_LINEA}\,=\,2), como resume la Tabla~\ref{tab:ocup}.
 
 \begin{table}[!htb]
 \caption{Ocupación de la línea a \num{114286} baud}\label{tab:ocup}
@@ -185,8 +184,8 @@ Una línea de 15 bytes tarda $15 \times \SI{87.5}{\micro\second} = \SI{1312.5}{\
  & \textbf{1 línea por par} & \textbf{\elegido{1 cada 2 pares (elegido)}} & \textbf{1 cada 50 pares} \\
 \midrule
 Líneas por segundo ($f_s$ en el PC) & 1000 & \textbf{500} & 20 \\
-Bytes por segundo & \num{15000} & \textbf{\num{7500}} & 300 \\
-Ocupación & \SI{131}{\percent}: \textbf{no cabe} & \textbf{\SI{66}{\percent}} & \SI{2.6}{\percent} \\
+Bytes por segundo & \num{11000} & \textbf{\num{5500}} & 220 \\
+Ocupación & \SI{96}{\percent}: \textbf{sin margen} & \textbf{\SI{48}{\percent}} & \SI{1.9}{\percent} \\
 Nyquist en el PC & \SI{500}{\hertz} & \textbf{\SI{250}{\hertz}} & \SI{10}{\hertz} \\
 Sirve para SINAD a 5 y \SI{20}{\hertz} & --- & \textbf{sí} (armónicos 2 a 5 $\le$ \SI{100}{\hertz}) & no \\
 \bottomrule
@@ -195,7 +194,7 @@ Sirve para SINAD a 5 y \SI{20}{\hertz} & --- & \textbf{sí} (armónicos 2 a 5 $\
 
 \subsection{Conversión a decimal en el PIC}
 
-El PIC16 no tiene divisor por hardware, así que \texttt{a\_decimal()} saca cada cifra restando 1000, 100, 10 y 1 tantas veces como quepa (hasta 18 restas de 16 bits para 4095) y le suma \texttt{'0'} (\texttt{0x30}). Previsión: $\approx\SI{95}{\micro\second}$ por valor; con el texto fijo y la copia al buffer (\texttt{tx\_string}), $\approx\SI{310}{\micro\second}$ por línea, una vez cada \SI{2}{\milli\second}.
+El PIC16 no tiene divisor por hardware, así que \texttt{a\_decimal()} saca cada cifra restando 1000, 100, 10 y 1 tantas veces como quepa (hasta 18 restas de 16 bits para 4095) y le suma \texttt{'0'} (\texttt{0x30}). Previsión: $\approx\SI{95}{\micro\second}$ por valor; con el texto fijo y la copia al buffer (\texttt{tx\_string}), $\approx\SI{280}{\micro\second}$ por línea, una vez cada \SI{2}{\milli\second}.
 
 \subsection{Ventajas y límites}
 
@@ -203,20 +202,22 @@ El PIC16 no tiene divisor por hardware, así que \texttt{a\_decimal()} saca cada
   \item[+] Se lee directo en una terminal o en el Serial Plotter, y el fin de línea sincroniza solo.
   \item[+] En LabVIEW basta \emph{VISA Read} con el carácter de fin \texttt{\textbackslash n} y \emph{Scan From String}; es el formato que sugiere el enunciado.
   \item[+] El PIC empieza a mandar al encenderse: el PC no tiene que pedir nada.
+  \item[+] Sin nombres la línea es corta (11 bytes): a 500 líneas/s usa menos de la mitad de la UART.
+  \item[$-$] El PC depende del orden: el primer número es $I$ y el segundo $Q$.
   \item[$-$] Al PC llega 1 de cada 2 pares ($f_s = \SI{500}{\hertz}$); suficiente para señales $\lesssim \SI{20}{\hertz}$.
-  \item[$-$] Sin verificación de errores ni número de secuencia: una línea dañada se descarta si deja de tener la forma «I:número,Q:número»; una perdida no se ve (se revisa el contador \texttt{adcLineasPerdidas} del PIC).
+  \item[$-$] Sin verificación de errores ni número de secuencia: una línea dañada se descarta si deja de tener la forma «número,número»; una perdida no se ve (se revisa el contador \texttt{adcLineasPerdidas} del PIC).
   \item[$-$] El PC no puede mandar comandos (el control del PWM queda por definir).
 \end{itemize}
 
 % ================================================================ V
 \section{Diagramas de tiempo}
 
-Las Figs.~\ref{fig:periodo}--\ref{fig:ocup} se generaron con el script \texttt{generar\_diagramas\_tiempo.m} (MATLAB). Los tiempos del ADC y de la UART son exactos: salen del datasheet (conversión de \SI{28.5}{\micro\second}, latencia de interrupción) o de los registros (periodo de \SI{1}{\milli\second}, \num{114286} baud, línea de \SI{1312.5}{\micro\second}). Los tiempos de CPU son una \emph{previsión}: se estimaron contando instrucciones a 4 instrucciones/\si{\micro\second} y se medirán con un pin marcador y el osciloscopio. Todas las figuras suponen una adquisición de \SI{10}{\micro\second}.
+Las Figs.~\ref{fig:periodo}--\ref{fig:ocup} se generaron con el script \texttt{generar\_diagramas\_tiempo.m} (MATLAB). Los tiempos del ADC y de la UART son exactos: salen del datasheet (conversión de \SI{28.5}{\micro\second}, latencia de interrupción) o de los registros (periodo de \SI{1}{\milli\second}, \num{114286} baud, línea de \SI{962.5}{\micro\second}). Los tiempos de CPU son una \emph{previsión}: se estimaron contando instrucciones a 4 instrucciones/\si{\micro\second} y se medirán con un pin marcador y el osciloscopio. Todas las figuras suponen una adquisición de \SI{10}{\micro\second}.
 
 \begin{figure}[!ht]
 \centering
 \includegraphics[width=\textwidth]{figuras/fig1_periodo_2ms.png}
-\caption{Dos periodos de muestreo. El Timer0 dispara la conversión de $I$ por hardware en $t = 0$ y en $t = \SI{1000}{\micro\second}$; cada ráfaga $I + Q$ termina hacia los \SI{97}{\micro\second}. En el primer tick el programa principal arma la línea ($\approx$\SI{310}{\micro\second}); en el segundo solo cuenta el par. La línea ocupa la UART \SI{1312.5}{\micro\second} (\SI{66}{\percent} de \SI{2}{\milli\second}) y sus interrupciones de TX caen sobre la ráfaga siguiente, donde pueden retrasar unos \SI{6}{\micro\second} el arranque de $Q$. RC2 saca la salida del Timer0: cambia de nivel en cada disparo.}
+\caption{Dos periodos de muestreo. El Timer0 dispara la conversión de $I$ por hardware en $t = 0$ y en $t = \SI{1000}{\micro\second}$; cada ráfaga $I + Q$ termina hacia los \SI{97}{\micro\second}. En el primer tick el programa principal arma la línea ($\approx$\SI{280}{\micro\second}); en el segundo solo cuenta el par. La línea ocupa la UART \SI{962.5}{\micro\second} (\SI{48}{\percent} de \SI{2}{\milli\second}) y sus interrupciones de TX caen sobre la ráfaga siguiente, donde pueden retrasar unos \SI{6}{\micro\second} el arranque de $Q$. RC2 saca la salida del Timer0: cambia de nivel en cada disparo.}
 \label{fig:periodo}
 \end{figure}
 
@@ -230,21 +231,21 @@ Las Figs.~\ref{fig:periodo}--\ref{fig:ocup} se generaron con el script \texttt{g
 \begin{figure}[!ht]
 \centering
 \includegraphics[width=\textwidth]{figuras/fig3_armado_linea.png}
-\caption{Conversión a decimal y armado de la línea. Lo que más tarda es \texttt{a\_decimal()} ($\approx$\SI{95}{\micro\second} por valor), seguido de la copia de los 15 bytes al buffer de TX con \texttt{tx\_string} ($\approx$\SI{105}{\micro\second}). Al poner \texttt{TX1IE} = 1, la interrupción de TX carga los primeros bytes y la línea empieza a salir.}
+\caption{Conversión a decimal y armado de la línea. Lo que más tarda es \texttt{a\_decimal()} ($\approx$\SI{95}{\micro\second} por valor), seguido de la copia de los 11 bytes al buffer de TX con \texttt{tx\_string} ($\approx$\SI{80}{\micro\second}). Al poner \texttt{TX1IE} = 1, la interrupción de TX carga los primeros bytes y la línea empieza a salir.}
 \label{fig:armado}
 \end{figure}
 
 \begin{figure}[!ht]
 \centering
 \includegraphics[width=0.92\textwidth]{figuras/fig4_byte_linea.png}
-\caption{(a) Byte \texttt{'I'} (\texttt{0x49}) en la línea: bit de inicio en 0, los 8 datos empezando por el menos significativo (1,0,0,1,0,0,1,0) y bit de parada en 1. Cada bit dura \SI{8.75}{\micro\second} y el byte \SI{87.5}{\micro\second}. (b) Línea completa del ejemplo $I = 2048$, $Q = 2051$: 15 bytes, \SI{1312.5}{\micro\second}.}
+\caption{(a) Byte \texttt{'2'} (\texttt{0x32}) en la línea: bit de inicio en 0, los 8 datos empezando por el menos significativo (0,1,0,0,1,1,0,0) y bit de parada en 1. Cada bit dura \SI{8.75}{\micro\second} y el byte \SI{87.5}{\micro\second}. (b) Línea completa del ejemplo $I = 2048$, $Q = 2051$: 11 bytes, \SI{962.5}{\micro\second}.}
 \label{fig:byte}
 \end{figure}
 
 \begin{figure}[!ht]
 \centering
 \includegraphics[width=\textwidth]{figuras/fig5_ocupacion_linea.png}
-\caption{Por qué una línea cada dos pares. Con una línea por par, cada línea (\SI{1312.5}{\micro\second}) dura más que el periodo de \SI{1}{\milli\second}: la cola de TX nunca se vacía y cada línea sale \SI{312}{\micro\second} más tarde que la anterior, hasta que el buffer se llena y se pierden líneas. Con una cada dos pares la línea queda libre el \SI{34}{\percent} del tiempo.}
+\caption{Por qué una línea cada dos pares. Con una línea por par, cada línea (\SI{962.5}{\micro\second}) ocupa casi todo el periodo de \SI{1}{\milli\second}: la UART queda ocupada el \SI{96}{\percent} y cualquier atraso llena el buffer de TX. Con una cada dos pares la línea queda libre el \SI{52}{\percent} del tiempo.}
 \label{fig:ocup}
 \end{figure}
 

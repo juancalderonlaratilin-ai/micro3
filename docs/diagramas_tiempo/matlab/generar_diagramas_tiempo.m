@@ -2,13 +2,13 @@ function generar_diagramas_tiempo()
 % GENERAR_DIAGRAMAS_TIEMPO  Diagramas de tiempo del ADC y la UART - Micro 3
 %
 % El PIC muestrea I y Q a 1 kHz y manda una linea de texto
-% "I:2048,Q:2051\r\n" cada 2 pares (500 lineas por segundo).
+% "2048,2051\r\n" (I,Q) cada 2 pares (500 lineas por segundo).
 %
 % Genera 5 figuras (PNG) en la carpeta "figuras" junto a este archivo:
 %   fig1_periodo_2ms.png      dos periodos de muestreo y una linea en la UART
 %   fig2_rafaga_IQ.png        adquisicion y conversion de I y Q
 %   fig3_armado_linea.png     conversion a decimal y armado de la linea
-%   fig4_byte_linea.png       un byte 8N1 y la linea de 15 bytes
+%   fig4_byte_linea.png       un byte 8N1 y la linea de 11 bytes
 %   fig5_ocupacion_linea.png  por que se manda 1 linea cada 2 pares
 %
 % Los tiempos de CPU son ESTIMADOS (conteo de instrucciones). Cuando se
@@ -53,8 +53,8 @@ t_isr_q = 11.5;          % duracion ISR de Q  [ESTIMADO]
 t_poll  = 3;             % main se da cuenta de que hay par nuevo  [ESTIMADO]
 t_get   = 5;             % adc_iq_get() + contar pares  [ESTIMADO]
 t_dec   = 95;            % a_decimal() de un numero de 4 cifras  [ESTIMADO]
-t_arm   = 10;            % poner 'I' ':' ',' 'Q' ':' CR LF  [ESTIMADO]
-t_tx    = 105;           % tx_string(): strlen + copiar 15 bytes al buffer  [ESTIMADO]
+t_arm   = 5;             % poner ',' CR LF  [ESTIMADO]
+t_tx    = 80;            % tx_string(): strlen + copiar 11 bytes al buffer  [ESTIMADO]
 t_txisr = 6;             % ISR de TX, una por byte  [ESTIMADO]
 t_bit   = Tbit*us;
 t_byte  = Tbyte*us;
@@ -78,7 +78,7 @@ m_decQ = m_decI + t_dec;
 m_arm  = m_decQ + t_arm;
 m_tx   = m_arm + t_tx;
 tx_ini = m_tx + 1.5;
-n_lin  = 15;                    % "I:4095,Q:4095\r\n"
+n_lin  = 11;                    % "4095,4095\r\n"
 t_lin  = n_lin*t_byte;
 T_lin  = pares_por_linea*t_Ts;  % una linea cada 2 ms
 
@@ -90,8 +90,8 @@ fprintf('Sesgo muestra I -> Q        %8.1f us\n', Q_muestra - I_muestra);
 fprintf('Armado de la linea (main)   %8.1f us\n', m_tx - m_ini);
 fprintf('Baud real                   %8.0f baud (error %.2f %%)\n', baud, (baud/115200-1)*100);
 fprintf('Byte 8N1                    %8.2f us\n', t_byte);
-fprintf('Linea de 15 bytes           %8.1f us (%.1f %% de %.0f ms)\n', t_lin, 100*t_lin/T_lin, T_lin/1000);
-fprintf('Una linea por par           %8.1f %% de la linea: no cabe\n\n', 100*t_lin/t_Ts);
+fprintf('Linea de 11 bytes           %8.1f us (%.1f %% de %.0f ms)\n', t_lin, 100*t_lin/T_lin, T_lin/1000);
+fprintf('Una linea por par           %8.1f %% de la linea: sin margen\n\n', 100*t_lin/t_Ts);
 
 % colores (los de MATLAB por defecto)
 azul    = [0 0.4470 0.7410];
@@ -101,7 +101,7 @@ morado  = [0.4940 0.1840 0.5560];
 rojo    = [0.6350 0.0780 0.1840];
 gris    = [0.6 0.6 0.6];
 claro   = @(c) c + (1-c)*0.55;
-txt15   = {'I',':','2','0','4','8',',','Q',':','2','0','5','1','CR','LF'};
+txtlin   = {'2','0','4','8',',','2','0','5','1','CR','LF'};
 
 %% Figura 1: dos periodos de muestreo y una linea en la UART
 f = nueva_figura([100 100 1000 480]);
@@ -131,11 +131,11 @@ bloque(m_ini, m_tx, 3, verde, 'línea');
 bloque(1000+m_ini, 1000+m_get, 3, claro(verde), '');
 text(1000+m_get+12, 3, 'solo cuenta el par', 'FontSize', 11, 'Color', [0.4 0.4 0.4]);
 bloque(2000+m_ini, tfin, 3, verde, '');
-% UART: 15 bytes
+% UART: 11 bytes
 for k = 1:n_lin
-    bloque(tx_ini+(k-1)*t_byte, tx_ini+k*t_byte, 2, claro(morado), txt15{k});
+    bloque(tx_ini+(k-1)*t_byte, tx_ini+k*t_byte, 2, claro(morado), txtlin{k});
 end
-cota(tx_ini, tx_ini+t_lin, 1.42, sprintf('línea de 15 bytes = %.0f µs (%.0f %% de %.0f ms)', t_lin, 100*t_lin/T_lin, T_lin/1000));
+cota(tx_ini, tx_ini+t_lin, 1.42, sprintf('línea de 11 bytes = %.0f µs (%.0f %% de %.0f ms)', t_lin, 100*t_lin/T_lin, T_lin/1000));
 % RC2 con ADC_PIN_PRUEBA = 2: TMR0_out cambia en cada coincidencia
 senal_digital([0 0; 0 1; 1000 0; 2000 1], 1, tfin);
 cota(0, 1000, 6.6, sprintf('Ts = %.0f µs', t_Ts));
@@ -183,23 +183,23 @@ bloque(m_get-o, m_decI-o, 2, verde, 'a_decimal(I)');
 bloque(m_decI-o, m_decQ-o, 2, verde, 'a_decimal(Q)');
 bloque(m_decQ-o, m_arm-o, 2, claro(verde), '');
 bloque(m_arm-o, m_tx-o, 2, 0.5*(verde+claro(verde)), 'tx_string');
-text(m_ini-o, 1.45, sprintf('adc_iq_get %.0f µs | cada cifra: restar 1000, 100, 10, 1 y sumar ''0'' | texto fijo %.0f µs', ...
+text(m_ini-o, 1.45, sprintf('adc_iq_get %.0f µs | cada cifra: restar 1000, 100, 10, 1 y sumar ''0'' | coma y CR LF %.0f µs', ...
      t_get, t_arm), 'FontSize', 11);
 for tt = [m_tx, tx_ini+t_byte, tx_ini+2*t_byte]
     bloque(tt-o, tt-o+t_txisr, 3, morado, '');
 end
 text(m_tx-o, 3.42, 'TX1IE = 1 -> sale el primer byte', 'Color', morado, 'FontSize', 11);
 for k = 1:4
-    bloque(tx_ini-o+(k-1)*t_byte, tx_ini-o+k*t_byte, 1, claro(morado), txt15{k});
+    bloque(tx_ini-o+(k-1)*t_byte, tx_ini-o+k*t_byte, 1, claro(morado), txtlin{k});
 end
 cota(m_ini-o, m_tx-o, 2.55, sprintf('armado de la línea = %.0f µs', m_tx - m_ini));
-terminar(ax, filas, [-5 700], [0.5 3.8], 'Figura 3. Conversión a decimal y armado de la línea "I:2048,Q:2051\r\n"');
+terminar(ax, filas, [-5 700], [0.5 3.8], 'Figura 3. Conversión a decimal y armado de la línea "2048,2051\r\n"');
 guardar(f, carpeta, 'fig3_armado_linea');
 
 %% Figura 4: un byte y la linea
 f = nueva_figura([100 100 1000 540]);
 subplot(2,1,1); hold on;
-bits = [0 1 0 0 1 0 0 1 0 1];   % inicio, 'I' = 0x49 con el LSB primero, parada
+bits = [0 0 1 0 0 1 1 0 0 1];   % inicio, '2' = 0x32 con el LSB primero, parada
 t = [-15, (0:9)*t_bit, 10*t_bit+15];
 v = [1, bits, 1];
 stairs(t, v, 'k', 'LineWidth', 1.5);
@@ -213,46 +213,46 @@ ylim([-0.6 1.6]); xlim([-15 10*t_bit+15]);
 set(gca, 'YTick', [0 1]);
 grid on; box on;
 xlabel('tiempo (µs)'); ylabel('nivel');
-title(sprintf('Figura 4a. Byte ''I'' (0x49) en 8N1: bit = %.2f µs, byte = %.1f µs (%.0f baud)', t_bit, t_byte, baud));
+title(sprintf('Figura 4a. Byte ''2'' (0x32) en 8N1: bit = %.2f µs, byte = %.1f µs (%.0f baud)', t_bit, t_byte, baud));
 subplot(2,1,2); hold on;
-hex = {'49','3A','32','30','34','38','2C','51','3A','32','30','35','31','0D','0A'};
+hex = {'32','30','34','38','2C','32','30','35','31','0D','0A'};
 for k = 1:n_lin
-    bloque((k-1)*t_byte, k*t_byte, 1, claro(morado), txt15{k});
+    bloque((k-1)*t_byte, k*t_byte, 1, claro(morado), txtlin{k});
     text((k-0.5)*t_byte, 0.55, hex{k}, 'HorizontalAlignment', 'center', 'FontSize', 10);
 end
-cota(0, n_lin*t_byte, 1.45, sprintf('15 bytes = %.1f µs', t_lin));
+cota(0, n_lin*t_byte, 1.45, sprintf('11 bytes = %.1f µs', t_lin));
 xlim([-10 n_lin*t_byte+10]); ylim([0.3 1.8]);
 set(gca, 'YTick', []);
 grid on; box on;
 xlabel('tiempo (µs)');
-title('Figura 4b. Línea "I:2048,Q:2051\r\n" (abajo, cada byte en hexadecimal)');
+title('Figura 4b. Línea "2048,2051\r\n" (I, coma, Q; abajo, cada byte en hexadecimal)');
 guardar(f, carpeta, 'fig4_byte_linea');
 
-%% Figura 5: una linea por par no cabe; una cada 2 pares si
+%% Figura 5: una linea por par (96 %, sin margen) contra una cada 2 pares (48 %)
 f = nueva_figura([100 100 1000 400]);
 ax = gca; hold on;
 filas = {'1 línea cada 2 pares', '1 línea por par', 'Timer0'};
 tfin = 4500;
 senal_digital([0 0; 0 1; 1 0; 1000 1; 1001 0; 2000 1; 2001 0; 3000 1; 3001 0; 4000 1; 4001 0], 3, tfin);
-% una linea por par: la cola nunca se vacia y cada linea sale mas tarde
+% una linea por par: cada linea sale al terminar la anterior; queda un hueco de 37,5 us
 t0 = tx_ini;
-for k = 0:2
+for k = 0:3
     bloque(t0, t0+t_lin, 2, claro(rojo), sprintf('línea %d', k+1));
-    t0 = t0 + t_lin;
+    t0 = max(t0 + t_lin, (k+1)*t_Ts + tx_ini);
 end
-text(tx_ini+3*t_lin-5, 2.45, sprintf('atraso +%.0f µs por línea', t_lin-t_Ts), 'HorizontalAlignment', 'right', 'Color', rojo, 'FontSize', 11);
-% una linea cada 2 pares: cabe
+text(tx_ini+4*t_Ts-5, 2.45, sprintf('libre: solo %.0f µs por ms', t_Ts-t_lin), 'HorizontalAlignment', 'right', 'Color', rojo, 'FontSize', 11);
+% una linea cada 2 pares: la mitad del tiempo libre
 for p = [0 2000]
     bloque(p+tx_ini, p+tx_ini+t_lin, 1, claro(morado), '');
 end
 bloque(4000+tx_ini, tfin, 1, claro(morado), '');
 text(tx_ini+t_lin/2, 1, sprintf('%.0f µs', t_lin), 'HorizontalAlignment', 'center', 'FontSize', 11);
-text(2000+tx_ini+t_lin/2, 1, sprintf('%.0f %% de la línea', 100*t_lin/T_lin), 'HorizontalAlignment', 'center', 'FontSize', 11);
+text(2000+tx_ini+t_lin/2, 1, sprintf('%.0f %%', 100*t_lin/T_lin), 'HorizontalAlignment', 'center', 'FontSize', 11);
 for p = [1000 2000 3000 4000]
     plot([p p], [0.5 3.5], 'k:');
 end
 terminar(ax, filas, [-10 tfin], [0.4 3.6], ...
-    sprintf('Figura 5. Una línea por par ocupa el %.0f %% (no cabe); una cada 2 pares, el %.0f %%', 100*t_lin/t_Ts, 100*t_lin/T_lin));
+    sprintf('Figura 5. Una línea por par ocupa el %.0f %% (sin margen); una cada 2 pares, el %.0f %%', 100*t_lin/t_Ts, 100*t_lin/T_lin));
 guardar(f, carpeta, 'fig5_ocupacion_linea');
 
 fprintf('Figuras guardadas en: %s\n', carpeta);

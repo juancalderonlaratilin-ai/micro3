@@ -1,8 +1,8 @@
-# LabVIEW paso a paso: recibir las líneas `I:…,Q:…` del PIC
+# LabVIEW paso a paso: recibir las líneas `I,Q` del PIC
 
 Guía para alguien que casi no ha usado LabVIEW. Vamos bloque por bloque y cable por cable. Está hecha para **LabVIEW 2021**.
 
-El PIC manda, sin que se le pida nada, 500 líneas por segundo así: `I:2048,Q:2051\r\n` (formato: `docs/especificacion_protocolo.md`). El VI tiene que hacer cuatro cosas: abrir el puerto, leer una línea, separar los dos números y graficarlos. Es **un solo VI**, sin subVIs.
+El PIC manda, sin que se le pida nada, 500 líneas por segundo así: `2048,2051\r\n` (formato: `docs/especificacion_protocolo.md`). El VI tiene que hacer cuatro cosas: abrir el puerto, leer una línea, separar los dos números y graficarlos. Es **un solo VI**, sin subVIs.
 
 Antes de empezar, comprueba que llegan las líneas con el Serial Plotter del Arduino IDE o con `python receptor_micro3.py COM5` (`docs/receptor_python_y_serial_plotter.md`), y **ciérralos**: solo un programa a la vez puede tener abierto el COM.
 
@@ -109,11 +109,11 @@ Ctrl + E para pasar al diagrama de bloques. Los terminales de P1 a P6 ya están 
 - `VISA resource name`: cable morado desde B2 (entra por un túnel en el borde del bucle).
 - `error in`: cable de error desde B2.
 - `byte count`: constante `50` (más largo que cualquier línea; la lectura termina antes, en el `\n`).
-- `read buffer` (salida rosada): la línea, por ejemplo `I:2048,Q:2051` + `\r\n`.
+- `read buffer` (salida rosada): la línea, por ejemplo `2048,2051` + `\r\n`.
 
 **B5. Scan From String** (Programming → String → Scan From String).
 - `input string`: el `read buffer` de B4.
-- `format string`: constante de texto **`I:%d,Q:%d`** (clic derecho en la entrada → Create → Constant y escribe eso).
+- `format string`: constante de texto **`%d,%d`** (clic derecho en la entrada → Create → Constant y escribe eso).
 - Estira el bloque hacia abajo con el mouse hasta que tenga **dos** salidas `output`. Lo que sobra al final (`\r\n`) no importa.
 - Conecta `output 1` al indicador `I (código)` y `output 2` a `Q (código)`.
 - **No** conectes su `error out` al cable de error principal: una línea cortada daría error y pararía el VI. Ese error va al Case de B7.

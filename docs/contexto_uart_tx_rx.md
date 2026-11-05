@@ -2,7 +2,7 @@
 
 Documento de contexto para quien trabaje con el enlace serie del proyecto, sea una persona u otra IA. Describe el firmware tal como está en `firmware/Micro_Firmware.X` (archivos `mcc_generated_files/eusart1.c`, `adc_ascii.c/.h`, `adc_iq.c`, `main.c`, `mcc_generated_files/interrupt_manager.c`) y la placa Micro3.
 
-**Resumen en una línea:** el PIC nunca espera a la UART. Cada 2 ms arma una línea de texto `I:2048,Q:2051\r\n`, la copia a un buffer circular de 64 bytes y deja que la interrupción de TX la saque byte por byte. El PC solo lee líneas; el PIC no recibe comandos.
+**Resumen en una línea:** el PIC nunca espera a la UART. Cada 2 ms arma una línea de texto `2048,2051\r\n`, la copia a un buffer circular de 64 bytes y deja que la interrupción de TX la saque byte por byte. El PC solo lee líneas; el PIC no recibe comandos.
 
 ---
 
@@ -42,7 +42,7 @@ En reposo la línea está en 1. Cada byte empieza con un bit de inicio en 0 y te
 |---|---|
 | Bit | 8,75 µs (8,68 µs a 115200 exactos) |
 | Byte | 87,5 µs |
-| Línea `I:4095,Q:4095\r\n` (15 bytes) | 1,31 ms |
+| Línea `4095,4095\r\n` (11 bytes) | 0,96 ms |
 | Capacidad de la línea | ≈ 11 430 bytes/s (a 114 286 baud) |
 
 Las interrupciones globales (`PEIE`, `GIE`) se encienden en `main()` al final de la configuración, después de `adc_iq_init()`.
@@ -66,7 +66,7 @@ código de main ──► tx_DAT() / tx_string() / EUSART1_Write()
 ### 3.2 Buffer circular de TX
 
 - Arreglo `eusart1TxBuffer[64]` con dos índices: `eusart1TxHead` (donde escribe main) y `eusart1TxTail` (de donde lee la ISR).
-- Vacío: `head == tail`. Lleno: `(head + 1) & 63 == tail`. Se usan **63 bytes** (una posición queda libre para distinguir lleno de vacío): caben 4 líneas de 15 bytes.
+- Vacío: `head == tail`. Lleno: `(head + 1) & 63 == tail`. Se usan **63 bytes** (una posición queda libre para distinguir lleno de vacío): caben 5 líneas de 11 bytes.
 - El índice avanza con `(i + 1) & (N − 1)`, una sola operación. Por eso los tamaños son potencias de 2 (hay un `#error` si no lo son).
 - Main solo escribe `head` y la ISR solo escribe `tail`. Como cada índice es de 8 bits (una sola instrucción), no hace falta apagar interrupciones.
 
@@ -83,13 +83,13 @@ Ninguna espera: si no hay espacio devuelven `false` al instante. El que llama **
 
 ### 3.4 Qué transmite el PIC
 
-- **Al arrancar:** el texto `Micro3 listo\r\n` (14 bytes). El PC lo ignora porque no tiene la forma `I:…,Q:…`.
-- **Datos del ADC:** una línea `I:xxxx,Q:xxxx\r\n` cada 2 pares del ADC = **500 líneas por segundo** (`ADC_PARES_POR_LINEA` = 2 en `adc_ascii.h`). Cada línea lleva una sola muestra de I y una de Q, sin promedio. El camino es `adc_iq_get()` → `adc_ascii_task()` → `a_decimal()` → `tx_string()`. Formato y cuentas: `docs/especificacion_protocolo.md`.
+- **Al arrancar:** el texto `Micro3 listo\r\n` (14 bytes). El PC lo ignora porque no tiene la forma `I,Q`.
+- **Datos del ADC:** una línea `xxxx,xxxx\r\n` cada 2 pares del ADC = **500 líneas por segundo** (`ADC_PARES_POR_LINEA` = 2 en `adc_ascii.h`). Cada línea lleva una sola muestra de I y una de Q, sin promedio. El camino es `adc_iq_get()` (en `main`) → `adc_ascii_par(i, q)` → `a_decimal()` → `tx_string()`; el mismo par va antes a `pwm_desde_adc(i, q)` (T-06, `docs/especificacion_pwm.md`). Formato y cuentas: `docs/especificacion_protocolo.md`.
 
   | Paso | Duración |
   |---|---|
-  | Salida de una línea de 15 bytes | 1,31 ms de cada 2 ms (65,6 % de la línea) |
-  | Armado de la línea (`a_decimal` de dos números y `tx_string`) | ≈ 310 µs [ESTIMADO, sin medir] |
+  | Salida de una línea de 11 bytes | 0,96 ms de cada 2 ms (48,1 % de la línea) |
+  | Armado de la línea (`a_decimal` de dos números y `tx_string`) | ≈ 280 µs [ESTIMADO, sin medir] |
 
 - El envío empieza solo al encender el PIC: el PC no tiene que mandar nada.
 
@@ -112,14 +112,14 @@ El PIC **no lee** lo que llega por RX: no hay comandos. El receptor queda config
 
 ## 5. Modo de `main.c`
 
-Hay un solo modo: `main()` llama a `adc_ascii_task()` en cada vuelta del `while(1)`. No hay constantes que cambiar.
+Hay un solo modo: en cada vuelta del `while(1)`, si `adc_iq_get()` entrega un par, `main()` llama a `pwm_desde_adc(i, q)` y a `adc_ascii_par(i, q)`. No hay constantes que cambiar.
 
 ## 6. Lado del PC
 
 - **Abrir el puerto:** 115200, 8 bits, sin paridad, 1 de parada, sin control de flujo. En LabVIEW (*VISA Configure Serial Port*): **Enable Termination Char = True** y carácter de fin `\n` (`0x0A`), para que cada *VISA Read* devuelva una línea.
 - **Leer:**
   1. Leer hasta `\n`.
-  2. Separar con la forma `I:%d,Q:%d` (*Scan From String* en LabVIEW, la expresión regular `I:(\d{1,5}),Q:(\d{1,5})\r?\n` en Python).
+  2. Separar con la forma `%d,%d` (*Scan From String* en LabVIEW, la expresión regular `^(\d{1,5}),(\d{1,5})\r?\n` (al inicio de la línea) en Python).
   3. Si la línea no tiene esa forma (por ejemplo, la primera, que llega cortada), descartarla y contarla como «línea mala».
 - **Herramientas:** `herramientas/interfaz_micro3.py` (mediciones: `docs/interfaz_mediciones.md`) y `herramientas/receptor_micro3.py` (gráfica y CSV). El Serial Plotter del Arduino IDE también la dibuja directo.
 
@@ -135,7 +135,7 @@ Hay un solo modo: `main()` llama a `adc_ascii_task()` en cada vuelta del `while(
 
 ## 8. Cosas a tener en cuenta
 
-- **La línea va al 65,6 %** con 500 líneas/s de 15 bytes: quedan ≈ 0,7 ms libres cada 2 ms. Mandar cada par (1000 líneas/s) no cabe: 1,31 ms > 1 ms.
+- **La línea va al 48,1 %** con 500 líneas/s de 11 bytes: quedan ≈ 1 ms libre cada 2 ms. Mandar cada par (1000 líneas/s) cabría apenas: 0,96 ms de cada 1 ms (96 %), sin margen.
 - **Prioridad de interrupciones** (`interrupt_manager.c`, un solo vector y sin anidamiento): se revisa primero TX, luego RX y luego el ADC. Una ISR de TX que coincide con la del ADC retrasa unos µs el arranque de la conversión de Q.
-- **Sin suma de verificación ni número de secuencia:** una línea dañada solo se nota si pierde la forma `I:número,Q:número`; una línea perdida no se nota. Por eso conviene revisar `adcLineasPerdidas` en el depurador y que el PC mida unas 500 líneas/s.
+- **Sin suma de verificación ni número de secuencia:** una línea dañada solo se nota si pierde la forma `número,número`; una línea perdida no se nota. Por eso conviene revisar `adcLineasPerdidas` en el depurador y que el PC mida unas 500 líneas/s.
 - Lo marcado [ESTIMADO] no se ha medido; se mide con RC2 y el osciloscopio (`ADC_PIN_PRUEBA` en `adc_iq.h`).

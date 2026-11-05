@@ -10,10 +10,10 @@ Proyecto Micro 3 · Fecha: 2026-10-16 · Borrador v1
 |---|---|---|
 | 0. Puesta en marcha (alimentación, programación, reloj) | 1 | por hacer |
 | 1. UART (enlace físico, buffer circular, ISR) | 1 | por hacer |
-| 2. Envío en texto ASCII (líneas `I:…,Q:…`) | 2 | el modo ASCII funciona (la persona, 2026-11-04); faltan 2.1 a 2.6 con 500 líneas/s |
-| 3. PWM + filtro RC (auto-cero) | 2 | por hacer |
+| 2. Envío en texto ASCII (líneas `I,Q`) | 2 | el modo ASCII funciona (la persona, 2026-11-04); faltan 2.1 a 2.6 con 500 líneas/s |
+| 3. PWM por canal + filtro pasa bajos (reconstruir I y Q) | 2 | código implementado (T-06), sin probar |
 | 4. ADC (canales I y Q) | 2 | código implementado (T-09), sin probar en el chip |
-| 5. Pulsador y lazo de auto-cero | 2 | por hacer |
+| 5. Pulsador y lazo de auto-cero | — | **pasa a Macro** (2026-11-04) |
 | 6. Integración con el PC (gráfica I vs Q) | 2 | por hacer |
 
 ---
@@ -90,36 +90,39 @@ Configuración: 8N1, 115200 baud, `SP1BRG = 34` (baud real 114 286, error −0,7
 
 ## Módulo 2. Envío en texto ASCII (Fase 2)
 
-El PIC manda `I:xxxx,Q:xxxx\r\n` cada 2 pares del ADC: 500 líneas por segundo, sin comando del PC (`docs/especificacion_protocolo.md`). Herramientas: una terminal serie, `herramientas/receptor_micro3.py` o `herramientas/interfaz_micro3.py`.
+El PIC manda `xxxx,xxxx\r\n` cada 2 pares del ADC: 500 líneas por segundo, sin comando del PC (`docs/especificacion_protocolo.md`). Herramientas: una terminal serie, `herramientas/receptor_micro3.py` o `herramientas/interfaz_micro3.py`.
 
 | ID | Qué se verifica | Procedimiento | Valor esperado | Criterio | Resultado |
 |---|---|---|---|---|---|
-| 2.1 | Forma de la línea | Abrir una terminal a 115200 8N1 y mirar 20 líneas | `I:` + número + `,Q:` + número + fin de línea; números de 0 a 4095 | 20 de 20 con la forma correcta | |
+| 2.1 | Forma de la línea | Abrir una terminal a 115200 8N1 y mirar 20 líneas | número (I) + `,` + número (Q) + fin de línea; números de 0 a 4095 | 20 de 20 con la forma correcta | |
 | 2.2 | Líneas por segundo | `receptor_micro3.py COM5 --muestras 10000` y leer el resumen | 500 muestras/s (1000 / `ADC_PARES_POR_LINEA`) | 500 ± 1 % | |
-| 2.3 | Tiempo de una línea | Osciloscopio en RC4 (TX), con decodificador serie si hay | Ráfaga de 15 bytes de ≈ 1,31 ms cada 2 ms | 1,25 a 1,40 ms; periodo 2 ms ± 1 % | |
+| 2.3 | Tiempo de una línea | Osciloscopio en RC4 (TX), con decodificador serie si hay | Ráfaga de 11 bytes de ≈ 0,96 ms cada 2 ms | 1,25 a 1,40 ms; periodo 2 ms ± 1 % | |
 | 2.4 | Sin pérdidas | 10 min con `interfaz_micro3.py` y el depurador de MPLAB X | 300 000 líneas | Líneas malas ≤ 1 (la primera, cortada) y `adcLineasPerdidas` = 0 | |
 | 2.5 | Arranque y reconexión | Encender el PIC con el PC ya escuchando; luego desconectar y reconectar el USB | Llega `Micro3 listo` y después las líneas; al reconectar siguen llegando | Sin reiniciar el PIC | |
 | 2.6 | Valor correcto | Entrada fija de 1,000 V medida con el multímetro en RC0 (y en RC1) | Código ≈ 1,000 × 4096 / 3,7 = 1107 | ± 10 códigos del calculado con la VDD medida | |
 
 ---
 
-## Módulo 3. PWM y filtro RC (Fase 2)
+## Módulo 3. PWM por canal y filtro pasa bajos: reconstruir I y Q (Fase 2)
 
-PWM6 en RA2 (I0) y PWM7 en RA4 (Q0). Timer2 con `T2PR = 255` a Fosc/4: período 64 µs (15,625 kHz), 10 bits de resolución. Salida DC ideal: `V = VDD × duty`.
+Cambio de enfoque del profesor (2026-11-04): el PWM ya no es el auto-cero (eso es de Macro, `docs/macro_autocero_pwm.md`). Ahora cada par del ADC se copia a un PWM por canal y un filtro pasa bajos devuelve la señal analógica. PWM6 en RA2 (I) y PWM7 en RA4 (Q); Timer2 con `T2PR = 255` a Fosc/4: periodo 64 µs (15,625 kHz), 10 bits. `duty = (código + 2) >> 2`; salida filtrada ideal `V = VDD · duty / 1024` = la tensión de entrada. Detalle: `docs/especificacion_pwm.md`.
+
+Montaje: generador (o fuente fija) en RC0 y RC1 como en el Módulo 4; filtro de `docs/especificacion_pwm.md` §6 (A: Sallen-Key de ≈ 100 Hz; B: RC pasivo de 2 etapas) en RA2 y RA4; osciloscopio de 2 canales.
 
 | ID | Qué se verifica | Procedimiento | Valor esperado | Criterio | Resultado |
 |---|---|---|---|---|---|
-| 3.1 | Frecuencia | Osciloscopio en la salida del PIC (antes del filtro) | 15,625 kHz (64 µs) | ±2 % (oscilador interno) | |
-| 3.2 | Duty vs. registro | Programar 0 %, 25 %, 50 %, 75 % y 100 %; medir el ancho del pulso | Ancho = duty × 64 µs | Error ≤ 1 paso de 10 bits (62,5 ns) | |
-| 3.3 | Voltaje DC tras el filtro | Con los mismos duty, medir con el multímetro la salida del filtro RC (antes del buffer) | `V = 3,7 × duty` | ±1 % de VDD (±37 mV) **[PROPUESTA]** | |
-| 3.4 | Linealidad | 11 puntos de 0 % a 100 % (cada 10 %). Graficar V medido contra V ideal | Recta | Error máximo ≤ 1 % de VDD **[PROPUESTA]** | |
-| 3.5 | Rizado | Osciloscopio en AC en la salida del filtro, con duty de 50 % (peor caso) | Anotar mV pico a pico | ≤ 1 LSB del ADC (0,9 mV) **[PROPUESTA]**. Si no cumple, subir RC o filtrar más | |
-| 3.6 | Tiempo de establecimiento | Escalón de duty de 25 % a 75 % y medir hasta llegar al 99 % del valor final | ≈ 4,6 × RC | Menor que el tiempo máximo del lazo de auto-cero (definir con el profesor) | |
-| 3.7 | Resolución | Cambiar el duty en 1 paso y medir el cambio de voltaje con el multímetro | 3,6 mV por paso (3,7 V / 1024) | Se distingue el cambio. Anotar el voltaje real | |
-| 3.8 | Independencia entre canales | Cambiar PWM6 y verificar que PWM7 no se mueva | Sin cambio | Variación de PWM7 ≤ 1 mV | |
-| 3.9 | Efecto del buffer | Medir el voltaje antes y después del buffer | Iguales | Diferencia ≤ 5 mV | |
+| 3.1 | Frecuencia | Osciloscopio en RA2 (pata 11) y RA4 (pata 3), antes del filtro | 15,625 kHz (64 µs) | ±2 % (oscilador interno) | |
+| 3.2 | El duty sigue a la entrada | Entrada fija de 0,5 V, 1,85 V y 3,0 V en RC0; medir el ancho del pulso en RA2 | ancho = 64 µs · V / 3,7 V (8,6 µs, 32 µs y 51,9 µs) | error ≤ 2 pasos (125 ns) | |
+| 3.3 | Continua tras el filtro | Con las mismas entradas, multímetro en la entrada (RC0) y en la salida del filtro | salida = entrada | diferencia ≤ 10 mV (≈ 3 pasos) **[PROPUESTA]** | |
+| 3.4 | Linealidad | 11 tensiones de entrada de 0,2 a 3,5 V; graficar salida contra entrada | recta de pendiente 1 | error máximo ≤ 1 % de VDD (37 mV) **[PROPUESTA]** | |
+| 3.5 | Rizado del PWM | Osciloscopio en AC en la salida del filtro, entrada en 1,85 V (duty 50 %, peor caso) | ≈ 0,2 mV pp (filtro A), ≈ 0,5 mV pp (B) | ≤ 1 código del ADC (0,9 mV) **[PROPUESTA]** | |
+| 3.6 | Seguimiento de una senoidal | Generador: 1,7 V de amplitud centrada en 1,85 V, a 5 Hz y a 20 Hz; canal 1 en RC0, canal 2 en la salida del filtro | misma forma y amplitud (filtro A: −0,01 dB a 20 Hz) | amplitud ±2 %; sin escalones visibles | |
+| 3.7 | Retardo | Mismo montaje; medir el desfase entre entrada y salida a 20 Hz | ≈ 2,3 ms del filtro + ≈ 0,6 ms de muestreo y retención | anotar | |
+| 3.8 | Independencia y envío | Mover solo la entrada de I; ver que la salida de Q no cambie; a la vez, revisar que siguen llegando 500 líneas/s al PC | Q quieta; líneas sin pérdidas | variación de Q ≤ 1 paso (3,6 mV); `adcLineasPerdidas` = 0 | |
 
-Datos que faltan: valores reales de R y C del filtro en la placa (para calcular el rizado y el tiempo de establecimiento).
+Opcional: SINAD de la salida reconstruida, capturando la salida del filtro con un segundo ADC u osciloscopio con FFT. Simulación: ≈ 54 dB a 20 Hz y ≈ 64 dB a 5 Hz con fc = 100 Hz (`docs/especificacion_pwm.md` §6.3). No es el requisito de > 60 dB, que es del ADC (4.15).
+
+Las pruebas del PWM de auto-cero (rizado en I0/Q0, establecimiento para el lazo, comandos por serial, sentido del offset) pasan a Macro: `docs/macro_autocero_pwm.md` §10.
 
 ---
 
@@ -129,7 +132,7 @@ ADC de 12 bits con referencia VDD = 3,7 V: 1 LSB = 3,7 V / 4096 = 0,903 mV. La s
 
 Muestreo a 1 kHz disparado por Timer0, I y Q convertidos en menos de 1 ms, sin promedio: una muestra de cada canal por milisegundo (se quitó `ADC_N_PROMEDIO` el 2026-11-03). Especificación: `docs/especificacion_adc.md`. **Requisito de la persona (2026-10-30): SINAD del ADC > 60 dB** (prueba 4.15).
 
-Los datos llegan al PC como líneas `I:…,Q:…` a 500 por segundo (1 de cada 2 pares; el ADC sigue muestreando a 1 kHz). Pin de prueba RC2 (`ADC_PIN_PRUEBA` en `adc_iq.h`): con 1 sube durante `adc_iq_isr()` (**dos pulsos por periodo**, fin de I y fin de Q); con 2 saca la salida del Timer0 (cuadrada de 500 Hz, cada flanco es un disparo).
+Los datos llegan al PC como líneas `I,Q` a 500 por segundo (1 de cada 2 pares; el ADC sigue muestreando a 1 kHz). Pin de prueba RC2 (`ADC_PIN_PRUEBA` en `adc_iq.h`): con 1 sube durante `adc_iq_isr()` (**dos pulsos por periodo**, fin de I y fin de Q); con 2 saca la salida del Timer0 (cuadrada de 500 Hz, cada flanco es un disparo).
 
 | ID | Qué se verifica | Procedimiento | Valor esperado | Criterio | Resultado |
 |---|---|---|---|---|---|
@@ -143,7 +146,7 @@ Los datos llegan al PC como líneas `I:…,Q:…` a 500 por segundo (1 de cada 2
 | 4.8 | Tiempo de adquisición | Cambiar la fuente de alta a baja impedancia y comparar; repetir con la salida real del opa de PCB2 (`docs/especificacion_adc.md` §3.2) | Mismo código | Diferencia ≤ 2 LSB. Si no, aumentar el tiempo de adquisición con la fórmula de `docs/especificacion_adc.md` §3.1 | |
 | 4.10 | *(retirada el 2026-11-04: era la compatibilidad con el eco, que ya no está en el firmware)* | — | — | — | |
 | 4.13 | Duración de `adc_iq_isr()` *(inferida del código)* | Ancho del pulso de RC2 con el osciloscopio | Anotar | ≤ 25 µs **[PROPUESTA]**, igual que 1.10 y 1.11 | |
-| 4.14 | Sin pérdidas *(inferida del código)* | 10 min de envío (500 líneas/s, 65,6 % de la línea); leer `adcParesPerdidos` y `adcLineasPerdidas` en el depurador | Ambos contadores en 0 | Y 500 líneas/s en el PC (prueba 2.4) | |
+| 4.14 | Sin pérdidas *(inferida del código)* | 10 min de envío (500 líneas/s, 48,1 % de la línea); leer `adcParesPerdidos` y `adcLineasPerdidas` en el depurador | Ambos contadores en 0 | Y 500 líneas/s en el PC (prueba 2.4) | |
 | **4.15** | **SINAD del ADC (requisito > 60 dB)** | Generador **directo** en RC0 (luego RC1), sin PCB2, con ≤ 10 kΩ. Senoidal de 1,7 V de amplitud centrada en 1,85 V a 5 Hz y a 20 Hz (para ciclos enteros con `fs` = 500 Hz en el PC y 4096 muestras: `k` = 41 da 5,005 Hz y `k` = 163 da 19,90 Hz; con otra frecuencia, la ventana de Kaiser reduce el error). Repetir con 0,5 V de amplitud. Capturar 4096 pares (8,2 s a 500 líneas/s) con `herramientas/interfaz_micro3.py` (`docs/interfaz_mediciones.md` §3) | 73 dB si solo hay cuantización | **SINAD ≥ 60 dB** (ENOB ≥ 9,67 bits) a 5 Hz y 20 Hz en I y en Q | |
 | 4.16 | Tiempo real de adquisición y ráfaga de I y Q | Osciloscopio en RC2, disparado en el flanco de subida del primer pulso: tiempo desde el flanco de bajada del primer pulso hasta el flanco de subida del segundo | ≈ 38,5 µs si `ADACQ` cuenta ciclos de Fosc (10 µs, lo que guarda MCC); ≈ 68,5 µs si cuenta `TCY` (40 µs, Fig. 32-2); ≈ 349 µs si cuenta `TAD` (320 µs, DS p.529). Cada medida puede tener 2 a 4 µs de más por la latencia de la ISR | I + Q terminan en < 1 ms (≤ 800 µs, 20 % de margen). Anotar cuál de los tres casos es (CP-7) | |
 | 4.17 | Jitter del instante de muestreo de Q | Con la UART transmitiendo y recibiendo, osciloscopio en persistencia sobre RC2: variación de la separación entre el pulso de I y el de Q | Anotar el ancho de la variación `T` | `T` ≤ 8,7 µs (−70 dB a 20 Hz y escala completa) **[PROPUESTA]**; hasta 27 µs consume los 60 dB enteros | |
@@ -153,7 +156,9 @@ Las pruebas **4.9, 4.11 y 4.12** también las cita el código, pero su definici�
 
 ---
 
-## Módulo 5. Pulsador y lazo de auto-cero (Fase 2)
+## Módulo 5. Pulsador y lazo de auto-cero (pasa a Macro)
+
+> **Para Macro, no para Micro 3** (cambio de enfoque del profesor, 2026-11-04). Se conserva como referencia.
 
 | ID | Qué se verifica | Procedimiento | Valor esperado | Criterio | Resultado |
 |---|---|---|---|---|---|
@@ -171,12 +176,12 @@ Las pruebas **4.9, 4.11 y 4.12** también las cita el código, pero su definici�
 
 | ID | Qué se verifica | Procedimiento | Valor esperado | Criterio | Resultado |
 |---|---|---|---|---|---|
-| 6.1 | Recepción en LabVIEW o Python | Conectar y leer las líneas `I:…,Q:…` (`docs/guia_labview_paso_a_paso.md`) | Valores iguales a los de la terminal | Coinciden en 100 muestras | |
+| 6.1 | Recepción en LabVIEW o Python | Conectar y leer las líneas `I,Q` (`docs/guia_labview_paso_a_paso.md`) | Valores iguales a los de la terminal | Coinciden en 100 muestras | |
 | 6.2 | Plano de impedancia | Con la sonda sobre un tubo sano (en reposo) | Punto o nube pequeña cerca del origen | Nube de radio ≤ 5 LSB **[PROPUESTA]** | |
 | 6.3 | Defecto | Pasar la sonda por un defecto conocido | Trayectoria clara fuera de la nube | Se distingue del ruido | |
 | 6.4 | Indicador | Sano / dañado en el panel | Verde en reposo, rojo con defecto | 10 de 10 | |
 | 6.5 | Tasa de datos | 500 líneas/s durante 10 min | 300 000 líneas | Líneas malas ≤ 1 y `adcLineasPerdidas` = 0 | |
-| 6.6 | Carga del enlace | Calcular la ocupación | 500 × 1,31 ms = 65,6 % | Menor del 50 %. **Con 500 líneas/s de 15 bytes no se cumple: la persona decide si se acepta el 65,6 % o se cambia el criterio** | |
+| 6.6 | Carga del enlace | Calcular la ocupación | 500 × 0,96 ms = 48,1 % | Menor del 50 %: **cumple** (calculado) con 500 líneas/s de 11 bytes | |
 
 ---
 

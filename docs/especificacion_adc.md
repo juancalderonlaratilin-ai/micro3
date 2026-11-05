@@ -31,7 +31,7 @@ Proyecto Micro 3 · Fase 2 · Fecha: 2026-10-30 · Estado: **código implementad
 Timer0 (cada 1 ms, por hardware) ──► ADGO = 1 ──► convierte I (RC0)
         adc_iq_isr: guarda I, ADPCH = Q, ADGO = 1 ──► convierte Q (RC1)
         adc_iq_isr: guarda Q, ADPCH = I, deja el par listo ──► avisa a main (cada 1 ms)
-main:   adc_iq_get() ──► adc_ascii_task() ──► línea "I:xxxx,Q:xxxx\r\n" (1 de cada 2 pares: 500/s, sin promedio)
+main:   adc_iq_get() ──► pwm_desde_adc() (T-06) y adc_ascii_par() ──► línea "xxxx,xxxx\r\n" (1 de cada 2 pares: 500/s, sin promedio)
 ```
 
 | Dato | Valor | Dónde / fuente |
@@ -51,7 +51,7 @@ main:   adc_iq_get() ──► adc_ascii_task() ──► línea "I:xxxx,Q:xxxx\
 
 Sin promedio, ni la ISR ni `adc_iq_get` suman o dividen: la ISR deja el par listo al terminar Q y `adc_iq_get` lo copia con `ADIE` apagado. Si `main` tarda más de 1 ms en leerlo, el par se pierde y se cuenta en `adcParesPerdidos`.
 
-**Envío al PC:** `main.c` tiene un solo modo: llama a `adc_ascii_task()`, que manda una línea `I:xxxx,Q:xxxx\r\n` cada `ADC_PARES_POR_LINEA` = 2 pares (§11).
+**Envío al PC:** `main.c` tiene un solo modo: cada par de `adc_iq_get()` va a `pwm_desde_adc()` (PWM de reconstrucción, `docs/especificacion_pwm.md`) y a `adc_ascii_par()`, que manda una línea `xxxx,xxxx\r\n` cada `ADC_PARES_POR_LINEA` = 2 pares (§11).
 
 ### 2.1 Fuente de disparo (`ADACT`): cuál usamos y por qué
 
@@ -63,7 +63,7 @@ Sin promedio, ni la ISR ni `adc_iq_get` suman o dividen: la ISR deja el par list
    - **No hay recarga por software, así que no aporta jitter.** En modo de 8 bits el Timer0 reinicia `TMR0L` solo, por hardware, cuando coincide con `TMR0H` (DS p.261); `TMR0H` es el registro de periodo y no se toca. Ninguna parte del firmware llama a `TMR0_Reload` ni a `TMR0_WriteTimer`, y `TMR0IE` no se habilita. [VERIFICADO en el código del zip] Aquí la palabra «overflow» de la tabla del DS significa «coincidencia», no un paso de 255 a 0.
    - Si en cambio se recargara el timer desde una ISR, cada periodo se alargaría lo que tarde la CPU en llegar a esa escritura (latencia de interrupción variable: hay un solo vector y la ISR de la UART puede estar corriendo), y el instante de disparo de I sí tendría jitter. [CÁLCULO]
    - **Duda [SIN VERIFICAR]:** el DS dice que el ADC arranca con el *flanco de subida* de la fuente (p.504) y que `TMR0_out` *conmuta* en cada coincidencia con postscaler 1:1 (§18.3.2, p.262). No dice si el `TMR0_overflow` de la Tabla 32-6 es el pulso de cada coincidencia (periodo de 1000 µs) o la salida que conmuta (un flanco de subida cada 2 coincidencias: 2000 µs). Se resuelve con la prueba 4.5: si el periodo entre los pulsos de I sale 2000 µs, hay que poner `TMR0H` = 124 (125 cuentas × 4 µs = 500 µs por coincidencia).
-2. **Es el timer que sobra.** El Timer2 está reservado para el PWM6/PWM7 del auto-cero (`T2PR` = 255, 15,625 kHz) y ese periodo no sirve para 1 ms. La especificación de diseño ya reservaba «Timer 1 o Timer 0» para el disparo del ADC (`especificacion_diseno_uart.md` §4). Ningún otro módulo del código actual usa el Timer0.
+2. **Es el timer que sobra.** El Timer2 lo usan el PWM6/PWM7 que reconstruyen I y Q (`T2PR` = 255, 15,625 kHz; `docs/especificacion_pwm.md`) y ese periodo no sirve para 1 ms. La especificación de diseño ya reservaba «Timer 1 o Timer 0» para el disparo del ADC (`especificacion_diseno_uart.md` §4). Ningún otro módulo del código actual usa el Timer0.
 3. **Cumple la regla del proyecto:** sin esperas ni retardos por software.
 
 No está escrito en ningún documento por qué se prefirió el Timer0 al Timer4 o al Timer6, que también servirían (la instrucción original del ADC no está en la carpeta). [SIN VERIFICAR: motivo exacto de esa elección]
@@ -76,7 +76,7 @@ No está escrito en ningún documento por qué se prefirió el Timer0 al Timer4 
 | `00100`, `00110`, `01000` | `TMR2`, `TMR4`, `TMR6` *postscaled* | Sí, técnicamente | también tienen registro de periodo; Timer2 es del PWM; Timer4 y Timer6 quedan libres como alternativa |
 | `00011`, `00101`, `00111` | `TMR1`, `TMR3`, `TMR5` *overflow* | No es cómodo | son de 16 bits y desbordan cada 65 536 cuentas: para 1 ms habría que recargarlos por software en cada vuelta |
 | `01010` a `01101` | `CCP1` a `CCP4` *trigger* | Posible, más complejo | no se estudió; no compensa teniendo el Timer0 |
-| `01110`, `01111` | `PWM6_out`, `PWM7_out` | No | siguen el periodo del PWM (15,6 kHz) y esos módulos son del auto-cero |
+| `01110`, `01111` | `PWM6_out`, `PWM7_out` | No | siguen el periodo del PWM (15,6 kHz) y esos módulos reconstruyen I y Q |
 | `00001` | pin de `ADACTPPS` | No | pide un pin libre y un generador externo |
 | `10000` a `10111` | `NCO1`, `C1`, `C2`, cambio de pin (IOC), `CLC1` a `CLC4` | No | no son un reloj de 1 kHz |
 | `11111`, `11101`, `11100` | escribir `ADPCH`, leer `ADRESH`, leer `ADERRH` | No | los dispara el software: tienen jitter |
@@ -244,13 +244,13 @@ Sin promedio (desde el 2026-11-03), el jitter de Q entra completo en cada muestr
 
 > **Advertencia.** Si el requisito se entiende como «60 dB con la señal real de PCB2» (±185 mV, el 10 % del rango), un ADC de 12 bits ideal da 54 dB y **no alcanza**, y ya no hay promedio que lo suba (con el de 5 que había antes llegaba a 61 dB solo si el ruido era blanco y de al menos 0,5 LSB). Si se entiende como una característica del **ADC**, medida con una senoidal casi a escala completa, un 12 bits ideal pasa con 14 dB de margen. En este documento se adopta la segunda lectura, que es la del enunciado («el SINAD del ADC»). **Hay que confirmarla con el profesor** (§13).
 
-**Qué consume el presupuesto de 1,42 LSB rms:** el ruido de la referencia y de la fuente (§7), el jitter del disparo de Q (§4), la no linealidad del ADC (`AD02` ±1 LSb típ., ±2 máx.; `AD03` ±1 LSb; DS p.632, medidas a `VDD = 3 V` y `TAD = 1 µs`, no en nuestras condiciones), el rizado de los PWM de auto-cero (≈ 1 mV pp a la salida según `docs/especificacion_pwm.md`, que se pliega a la banda del ADC) y el ruido de PCB2. El offset y la ganancia (`AD04`, `AD05`, ±6 LSb máx.) **no** entran en el SINAD: son errores de continua.
+**Qué consume el presupuesto de 1,42 LSB rms:** el ruido de la referencia y de la fuente (§7), el jitter del disparo de Q (§4), la no linealidad del ADC (`AD02` ±1 LSb típ., ±2 máx.; `AD03` ±1 LSb; DS p.632, medidas a `VDD = 3 V` y `TAD = 1 µs`, no en nuestras condiciones), el acople de los PWM de reconstrucción (15,6 kHz en RA2/RA4, que se pliega a la banda del ADC si llega a RC0/RC1) y el ruido de PCB2. El offset y la ganancia (`AD04`, `AD05`, ±6 LSb máx.) **no** entran en el SINAD: son errores de continua.
 
 **Cómo se mide** [PROPUESTA]:
 
 1. Generador de funciones conectado **directo** al pin RC0 (y luego a RC1), a través de ≤ 10 kΩ, **sin PCB2**: el requisito es del ADC. Senoidal centrada en 1,85 V con 1,7 V de amplitud (sin recorte: de 0,15 V a 3,55 V). Se repite con una de 0,5 V para ver la dependencia.
 2. Frecuencias de 5 Hz y de 20 Hz (la banda del diseño). Para que quepan ciclos enteros: con `fs = 500 Hz` en el PC, `M = 4096` y `k = 163` ciclos, `f = 19,90 Hz`; con `k = 41`, `f = 5,005 Hz` (`k` impar para que no se repitan códigos). Si el generador no se puede sincronizar, la ventana de Kaiser del script reduce el error.
-3. Captura de 4096 pares por las líneas ASCII (500 líneas/s = 65,6 % de la línea, 8,2 s). Cada par ya es el ADC puro: el PIC manda 1 de cada 2, sin promediar. Si `adcLineasPerdidas` sube o el PC mide menos de 500 líneas/s, no vale esa captura.
+3. Captura de 4096 pares por las líneas ASCII (500 líneas/s = 48,1 % de la línea, 8,2 s). Cada par ya es el ADC puro: el PIC manda 1 de cada 2, sin promediar. Si `adcLineasPerdidas` sube o el PC mide menos de 500 líneas/s, no vale esa captura.
 4. Calcular con el script de abajo.
 
 ```python
@@ -300,7 +300,7 @@ Comprobado con capturas sintéticas (12 bits, 3,7 V, 1,7 V de amplitud): sin rui
 
 - Si `VREF = VDD`, un rizado de 10 mV en la fuente con `Vin/Vref = 0,5` aporta 5 mV, unos 5,5 LSB, **salvo que la señal también varíe con `VDD`**. `Vref2 ≈ 1,85 V` sale de un divisor del riel de 3,7 V (preinforme §1.2), así que el nivel de reposo es ratiométrico y esa parte se cancela [CÁLCULO, supuesto: ambos del mismo riel]. Solo la parte de la señal (±185 mV) no se cancela.
 - TI (Cap. 6, págs. 65–79) trata el ruido de la fuente con el PSRR. Para mejorarlo propone optimizar el *layout* y planificar las frecuencias; para depurar, agregar un LDO, comprobar las especificaciones de la fuente, aumentar los capacitores de desacoplo del ADC y **reemplazar las fuentes por una de banco, una por una** (p.79). El LDO y el desacoplo son lo aplicable aquí; el análisis de TI es de ADC delta-sigma.
-- El rizado de los trimmers sustituidos por PWM se multiplica por 10 en la etapa de resta (preinforme ec. 5). Para quedar bajo 1 LSB (0,9 mV) hace falta ≲ 90 µV pp en I0/Q0 (es el CP-2 de `MASTER_PLAN.md`).
+- *(Macro)* El rizado de los trimmers sustituidos por PWM se multiplica por 10 en la etapa de resta (preinforme ec. 5); en Micro 3 el PWM no entra a PCB2, así que no aplica (cambio de enfoque, 2026-11-04).
 
 ### 7.1 Origen de `Vref`: dentro de la PIC o referencia externa
 
@@ -357,7 +357,7 @@ if sigma > 0:
 
 ## 9. Ver I y Q en el Serial Plotter
 
-- Las líneas `I:2048,Q:2051\r\n` (hasta 15 bytes) que manda `adc_ascii.c` tienen el formato `nombre:valor` del Serial Plotter de Arduino IDE: se ven directo, sin programa intermedio.
+- Las líneas `2048,2051\r\n` (hasta 11 bytes) que manda `adc_ascii.c` son números separados por coma, que el Serial Plotter de Arduino IDE entiende: se ven directo, sin programa intermedio.
 - A 500 líneas/s corre rápido. Para mirar con calma una señal lenta se puede subir `ADC_PARES_POR_LINEA` (50 = 20 líneas/s), pero así **no sirve** para el SINAD ni para el histograma (decima por 50 y pliega). Para medir, dejarlo en 2.
 - **Para qué:** ver que I y Q siguen a un generador conectado a RC0 y RC1, y que `adcLineasPerdidas` queda en 0.
 - **Resultado:** la persona confirmó el 2026-11-04 que el modo ASCII funciona. Falta anotar en `docs/estado.md` qué señal, qué frecuencia y los contadores.
@@ -384,13 +384,13 @@ En el caso A es despreciable. En el B no lo es para un plano de impedancia I vs 
 Desde el 2026-11-04 (decisión de la persona) los datos van como texto, una línea por par (`docs/especificacion_protocolo.md`):
 
 ```
-I:2048,Q:2051\r\n
+2048,2051\r\n
 ```
 
 - Una línea cada `ADC_PARES_POR_LINEA` = 2 pares: **500 líneas/s**, fs = 500 Hz en el PC. El ADC sigue muestreando a 1 kHz con el Timer0, así que el instante de cada muestra no cambia.
-- Ocupación de la línea: 15 bytes × 500 / 11 429 B/s = **65,6 %**. Una línea por par (1000/s) no cabe: tardaría 1,31 ms cada 1 ms.
+- Ocupación de la línea: 11 bytes × 500 / 11 429 B/s = **48,1 %**. Una línea por par (1000/s) cabría apenas: 0,96 ms de cada 1 ms (96 %), sin margen.
 - El envío empieza solo al encender el PIC; no hay comandos del PC.
-- Sin suma de verificación ni número de secuencia: una línea dañada se descarta en el PC si pierde la forma `I:número,Q:número`; una perdida no se ve (por eso se revisan `adcLineasPerdidas` y las líneas por segundo).
+- Sin suma de verificación ni número de secuencia: una línea dañada se descarta en el PC si pierde la forma `número,número`; una perdida no se ve (por eso se revisan `adcLineasPerdidas` y las líneas por segundo).
 
 ## 12. Decisiones y cambios que cita el código
 
@@ -399,7 +399,7 @@ El código cita `docs/instrucciones_claude_code_adc.md`, que **no estaba en la c
 | ID | Qué dice el código | Dónde |
 |---|---|---|
 | D-1 | `ADC_N_PROMEDIO = 5`. **Retirada el 2026-11-03** por la persona: ya no hay promedio | (antes `adc_iq.h`) |
-| D-2 | formato de los datos hacia el PC. **Cambiado el 2026-11-04**: ahora líneas de texto `I:…,Q:…` (§11) | `adc_ascii.c` |
+| D-2 | formato de los datos hacia el PC. **Cambiado el 2026-11-04**: ahora líneas de texto `I,Q` (§11) | `adc_ascii.c` |
 | D-3 | no aparece en el código | – |
 | D-4 | pin de prueba RC2 durante la ISR | `adc_iq.h` |
 | C-11 | `interrupt_manager.c` llama directo a `adc_iq_isr()` (antes iba por el puntero `ADCC_ADI_InterruptHandler`) | `interrupt_manager.c` |
@@ -427,7 +427,7 @@ El código cita `docs/instrucciones_claude_code_adc.md`, que **no estaba en la c
 - [ ] Ninguna salida de PCB2 debe superar `VDD + 0,3 V`; resistencia en serie si hace falta.
 - [ ] Salida de PCB2 de baja impedancia (op-amp), ≤ 10 kΩ. Anotar su `Zout` (§3.2).
 - [ ] Tierra analógica y digital unidas en un solo punto cerca del ADC; PWM, UART y reloj lejos de `V_I,OUT`, `V_Q,OUT` y la referencia.
-- [ ] Rizado de I0/Q0 ≲ 90 µV pp.
+- [ ] *(Macro)* Rizado de I0/Q0 ≲ 90 µV pp.
 - [ ] Revisar la red de 60 Hz: el filtro de 20 Hz la atenúa solo ≈ 20 dB [CÁLCULO, Butterworth ideal con `fn = 19,4 Hz`].
 
 **Firmware**

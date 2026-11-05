@@ -8,7 +8,7 @@ Reglas:
 1. **Usa solo los datos de este documento.** No inventes valores, registros, páginas del datasheet ni resultados. Si algo falta, escribe «por definir» o «por medir».
 2. **Conserva las etiquetas de origen** de cada número: **[DS]** datasheet, **[CÁLCULO]** cuenta exacta, **[ESTIMADO]** previsión por conteo de instrucciones, **[POR MEDIR]**. Nada de esto se ha medido todavía en la placa, salvo lo marcado como «medido». Lo estimado se redacta como «se prevé», nunca como resultado.
 3. Muestra cada cálculo con la fórmula, los valores sustituidos y el resultado.
-4. En la UART explica el **formato de texto ASCII** que se usa (`I:xxxx,Q:xxxx\r\n`, 500 líneas/s) con sus números, por qué cabe y por qué se manda 1 línea cada 2 pares, y sus ventajas y límites.
+4. En la UART explica el **formato de texto ASCII** que se usa (`xxxx,xxxx\r\n`, 500 líneas/s) con sus números, por qué cabe y por qué se manda 1 línea cada 2 pares, y sus ventajas y límites.
 5. Estructura sugerida:
    1. Descripción breve del sistema
    2. UART: configuración y cálculos
@@ -53,45 +53,44 @@ Reglas:
 
 **Tolerancia de baud:** el receptor muestrea cada bit a la mitad. El bit de parada está a 9,5 bits del flanco de inicio y el desfase acumulado debe ser menor que medio bit: 0,5/9,5 = **±5,3 %** teórico entre los dos extremos; en la práctica se reserva la mitad (±2 a 3 %). Peor caso: −0,79 % del baud más ±2 % del oscilador interno ≈ **−2,8 %**: funciona, con poco margen. [CÁLCULO]
 
-**Por qué 115200 y no 9600/19200** (con 500 líneas/s de 15 bytes = 7500 B/s):
+**Por qué 115200 y no 9600/19200** (con 500 líneas/s de 11 bytes = 5500 B/s):
 
-| Baud | µs por byte | Bytes/s | Ocupación con 7500 B/s |
+| Baud | µs por byte | Bytes/s | Ocupación con 5500 B/s |
 |---|---|---|---|
-| 9600 | 1041,7 | 960 | 781 %: no cabe |
-| 19200 | 520,8 | 1920 | 391 %: no cabe |
-| 57600 | 173,6 | 5760 | 130 %: no cabe |
-| **115200** | **86,8** | **11 520** | **65 %** |
+| 9600 | 1041,7 | 960 | 573 %: no cabe |
+| 19200 | 520,8 | 1920 | 286 %: no cabe |
+| 57600 | 173,6 | 5760 | 95 %: sin margen |
+| **115200** | **86,8** | **11 520** | **48 %** |
 
 Resultado medido el 2026-10-19 (eco a 115200): 20/20, 256/256 y 1000/1000 bytes sin errores.
 
 ## C. Formato de los datos: líneas de texto ASCII
 
-Decisión del equipo (2026-11-04): el PIC manda **texto**, una línea por par, sin que el PC le pida nada:
+Decisión del equipo (2026-11-04): el PIC manda **texto**, una línea cada 2 pares, sin que el PC le pida nada. Primero va I y después Q, separados por una coma y sin nombres:
 
 ```
-I:2048,Q:2051\r\n
+2048,2051\r\n
 ```
 
 | Campo | Bytes |
 |---|---|
-| `I:` | 2 |
 | I en decimal, 0 a 4095, sin ceros a la izquierda | 1 a 4 |
-| `,Q:` | 3 |
+| `,` | 1 |
 | Q en decimal | 1 a 4 |
 | `\r\n` (0x0D 0x0A) | 2 |
 
-Ejemplo: I = 2048, Q = 2051 → `49 3A 32 30 34 38 2C 51 3A 32 30 35 31 0D 0A` (15 bytes).
+Ejemplo: I = 2048, Q = 2051 → `32 30 34 38 2C 32 30 35 31 0D 0A` (11 bytes).
 
 Números [CÁLCULO]:
-- Línea de 15 bytes = 15 × 87,5 µs = **1312,5 µs**: dura más que el periodo de muestreo (1 ms).
-- Por eso se manda **una línea cada 2 pares** (`ADC_PARES_POR_LINEA` = 2): **500 líneas/s** → 7500 B/s = **65,6 %** de la línea. Una por par serían 15 000 B/s = 131 %: no cabe.
+- Línea de 11 bytes = 11 × 87,5 µs = **962,5 µs**: casi todo el periodo de muestreo (1 ms).
+- Por eso se manda **una línea cada 2 pares** (`ADC_PARES_POR_LINEA` = 2): **500 líneas/s** → 5500 B/s = **48,1 %** de la línea. Una por par serían 11 000 B/s = 96 %: cabe apenas, sin margen.
 - fs en el PC = 500 Hz. El ADC sigue muestreando a 1 kHz con el Timer0: el PIC descarta 1 de cada 2 pares (sin promediar). Nyquist en el PC: 250 Hz, por encima de las señales de 5 y 20 Hz y sus armónicos 2 a 5 (hasta 100 Hz).
 
-Conversión a decimal en el PIC (`a_decimal()`): sin dividir, restando 1000, 100, 10 y 1 tantas veces como quepa (hasta 18 restas de 16 bits para 4095), y cada cifra se pasa a texto con `'0' + cifra` (0x30 + n): **≈ 95 µs por valor**, ≈ 190 µs para I y Q; más el texto fijo (≈ 10 µs) y `tx_string` (≈ 105 µs): **≈ 310 µs por línea** [ESTIMADO].
+Conversión a decimal en el PIC (`a_decimal()`): sin dividir, restando 1000, 100, 10 y 1 tantas veces como quepa (hasta 18 restas de 16 bits para 4095), y cada cifra se pasa a texto con `'0' + cifra` (0x30 + n): **≈ 95 µs por valor**, ≈ 190 µs para I y Q; más el texto fijo (≈ 5 µs) y `tx_string` (≈ 80 µs): **≈ 280 µs por línea** [ESTIMADO].
 
-Ventajas: legible directamente en una terminal y en el Serial Plotter del Arduino IDE (`nombre:valor` separados por coma); en LabVIEW basta *VISA Read* con el carácter de fin `\n` y *Scan From String* con `I:%d,Q:%d`; el fin de línea sincroniza solo; sin problemas de orden de bytes; el PIC empieza a mandar al encenderse. Es lo que sugiere el enunciado.
+Ventajas: legible directamente en una terminal y en el Serial Plotter del Arduino IDE (números separados por coma); en LabVIEW basta *VISA Read* con el carácter de fin `\n` y *Scan From String* con `%d,%d`; el fin de línea sincroniza solo; sin problemas de orden de bytes; la línea es corta (11 bytes) porque no lleva nombres; el PIC empieza a mandar al encenderse. Es lo que sugiere el enunciado.
 
-Límites: más bytes por muestra, así que llega 1 de cada 2 pares (500 Hz en el PC); largo variable; la conversión a decimal cuesta ≈ 310 µs de CPU por línea; sin verificación de integridad ni número de secuencia (una línea dañada solo se nota si pierde la forma `I:número,Q:número`; una perdida no se ve: se revisa el contador `adcLineasPerdidas` en el PIC y que el PC reciba 500 líneas/s); el PC no le manda comandos al PIC.
+Límites: el PC depende del orden (primer número = I, segundo = Q); más bytes por muestra que un formato binario, así que llega 1 de cada 2 pares (500 Hz en el PC); largo variable; la conversión a decimal cuesta ≈ 280 µs de CPU por línea; sin verificación de integridad ni número de secuencia (una línea dañada solo se nota si pierde la forma `número,número`; una perdida no se ve: se revisa el contador `adcLineasPerdidas` en el PIC y que el PC reciba 500 líneas/s); el PC no le manda comandos al PIC.
 
 ## D. ADC: valores y cálculos
 
@@ -100,7 +99,7 @@ Límites: más bytes por muestra, así que llega 1 de cada 2 pares (500 Hz en el
 | Módulo | ADCC de 12 bits, SAR, modo básico (`ADCON2` = 0), resultado justificado a la derecha | [DS] / código |
 | Referencia | `ADREF` = 0x00: Vref+ = **VDD = 3,7 V**, Vref− = VSS | código |
 | LSB | 3,7 V / 4096 = **0,9033 mV** | [CÁLCULO] |
-| Código ideal | N = Vin · 4096 / VDD; **1,85 V → 2048** (en la línea: `I:2048`) | [CÁLCULO] |
+| Código ideal | N = Vin · 4096 / VDD; **1,85 V → 2048** (en la línea: `2048,…`) | [CÁLCULO] |
 | Canales | I = RC0 (ANC0, `ADPCH` = 0x10), Q = RC1 (ANC1, 0x11); un solo ADC multiplexado, I y luego Q en ráfaga | código |
 | Reloj del ADC | `ADCLK` = Fosc/32 → **TAD = 2 µs** (rango permitido 0,5 a 9 µs, AD20) | [DS] |
 | Conversión | 14·TAD + 2·TCY = 28 + 0,5 = **28,5 µs** por canal (AD22) | [DS] |
@@ -162,11 +161,11 @@ Caso A (adquisición de 10 µs), I = 2048, Q = 2051:
 | ISR de Q (guarda Q, vuelve a I, avisa a main) | ≈ 85,5 → 97 µs | [ESTIMADO] |
 | `adc_iq_get()` | ≈ 5 µs | [ESTIMADO] |
 | **Conversión a decimal** (`a_decimal` de I y de Q) | ≈ 95 + 95 µs | [ESTIMADO] |
-| **Armado de la línea**: texto fijo + `tx_string` | 10 + 105 µs | [ESTIMADO] |
-| Total de «par listo» a «línea encolada» | ≈ 310 µs (solo cada 2 pares) | [ESTIMADO] |
-| Transmisión de la línea | ≈ 410 → 1725 µs (1312,5 µs) | [CÁLCULO] |
+| **Armado de la línea**: texto fijo + `tx_string` | 5 + 80 µs | [ESTIMADO] |
+| Total de «par listo» a «línea encolada» | ≈ 280 µs (solo cada 2 pares) | [ESTIMADO] |
+| Transmisión de la línea | ≈ 380 → 1345 µs (962,5 µs) | [CÁLCULO] |
 | ISR de TX | ≈ 6 µs, una por byte | [ESTIMADO] |
-| Periodo de las líneas | 2000 µs (65,6 % ocupado) | [CÁLCULO] |
+| Periodo de las líneas | 2000 µs (48,1 % ocupado) | [CÁLCULO] |
 
 Observación para el texto: la línea termina pasado el siguiente disparo (1000 µs). Las ISR de TX de ese tramo pueden coincidir con la ISR de I del periodo siguiente y retrasar el arranque de Q unos 6 µs: es la principal fuente de jitter de Q.
 
@@ -174,8 +173,8 @@ Pies de figura sugeridos:
 - Figura 1. Dos periodos de muestreo a 1 kHz y una línea ASCII cada 2 pares.
 - Figura 2. Adquisición, conversión e interrupciones de I y Q.
 - Figura 3. Conversión a decimal y armado de la línea.
-- Figura 4. Byte 'I' (0x49) en 8N1 y línea de 15 bytes.
-- Figura 5. Una línea por par no cabe; una cada 2 pares, sí.
+- Figura 4. Byte '2' (0x32) en 8N1 y línea de 11 bytes.
+- Figura 5. Una línea por par ocupa el 96 %; una cada 2 pares, el 48 %.
 
 ## G. Mediciones pendientes (cómo se harán)
 

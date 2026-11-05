@@ -30,7 +30,7 @@ Actúa como un ingeniero electrónico experto. A continuación se listan los req
 
 ## 5. Procesamiento de Señal y Requisitos Adicionales
 *   **Modulación y Frecuencia:** "Modular" (procesar/acondicionar) los resultados del ADC para poder observar claramente la componente de 10 Hz.
-*   **Auto-zero:** Definir y calcular cuánta precisión necesitamos en la técnica de *auto-zero* (autocero) para cancelar el voltaje de offset del sistema.
+*   **Auto-zero:** Definir y calcular cuánta precisión necesitamos en la técnica de *auto-zero* (autocero) para cancelar el voltaje de offset del sistema. *(2026-11-04: pasa a Macro por el cambio de enfoque del profesor; en Micro 3 el PWM reconstruye las señales muestreadas, `docs/especificacion_pwm.md`.)*
 *   **Meta a corto plazo:** Tener el programa (código) terminado y funcionando para la próxima clase, junto con el pin de la fuente física listo.
 
 ---

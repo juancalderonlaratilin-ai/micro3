@@ -17,6 +17,7 @@
       </logicalFolder>
       <itemPath>adc_iq.h</itemPath>
       <itemPath>adc_ascii.h</itemPath>
+      <itemPath>pwm.h</itemPath>
     </logicalFolder>
     <logicalFolder name="LinkerScript"
                    displayName="Linker Files"
@@ -39,6 +40,7 @@
       <itemPath>main.c</itemPath>
       <itemPath>adc_iq.c</itemPath>
       <itemPath>adc_ascii.c</itemPath>
+      <itemPath>pwm.c</itemPath>
     </logicalFolder>
     <logicalFolder name="ExternalFiles"
                    displayName="Important Files"

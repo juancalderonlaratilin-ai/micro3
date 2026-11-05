@@ -36,7 +36,7 @@ Notas del chat del equipo (captura del 2026-10-30) y mensaje de la persona. La p
 | RC-6 | «Desviación estándar del histograma del periodo» y, según la persona, **jitter con σ < 10 ns** | Medir el periodo de muestreo 10 000 veces | §8.2 |
 | RC-7 | «10 mil muestras con LabVIEW para hacer el histograma» | Captura de 10 000 muestras y su histograma | §8.1 |
 | RC-8 | «Modular los resultados del ADC y ver los 10 Hz» | Ver un tono de 10 Hz en los datos del ADC | §8.4 [SIN VERIFICAR] |
-| RC-9 | «Precisión del auto-cero: cuánta necesitamos» | Resolución y residuo del PWM de auto-cero | §5 (B7), §8.5 |
+| RC-9 | «Precisión del auto-cero: cuánta necesitamos» | **Pasa a Macro** (cambio de enfoque del profesor, 2026-11-04). En Micro 3: un PWM por canal reproduce las muestras y un filtro pasa bajos devuelve la señal analógica | §5 (B7), §8.5 |
 | RC-10 | Persona: «con 12 bits debo tener 72 dB de SINAD en condiciones ideales»; `fs` = 1 kHz | Referencia ideal del ADC y frecuencia de muestreo | §3, §8.3 |
 | RC-11 | Persona: qué se hace en transmisión y en el PC; formato lógico y físico; baud; velocidad; cuántos bytes; qué formato | Respuestas directas | §2 |
 
@@ -58,17 +58,17 @@ Requisitos técnicos ya vigentes del ADC (detalle en `docs/especificacion_adc.md
 
 | Pregunta | Respuesta | Etiqueta | Detalle |
 |---|---|---|---|
-| ¿Qué hace el PIC? | Muestrea I (RC0) y Q (RC1) cada 1 ms con el ADC (sin promedio) y, cada 2 pares, manda una línea de texto `I:xxxx,Q:xxxx\r\n` por la UART: 500 líneas/s. Empieza al encender; no recibe comandos | [VERIFICADO en el código] | §5 B5 a B9 |
-| ¿Qué hace el PC? | Abre el puerto a 115200 8N1, lee línea por línea (hasta `\n`), separa I y Q con `I:%d,Q:%d`, descarta las líneas con otra forma, convierte los códigos a voltios y dibuja (plano I–Q, histograma, espectro) | [VERIFICADO] (`herramientas/interfaz_micro3.py`); el VI de LabVIEW, guía en `docs/guia_labview_paso_a_paso.md` | §5 B10, §8 |
-| Formato lógico | Texto **ASCII**: `I:2048,Q:2051\r\n`, números en decimal de 0 a 4095, hasta 15 bytes por línea | [VERIFICADO] | §7, `especificacion_protocolo.md` |
+| ¿Qué hace el PIC? | Muestrea I (RC0) y Q (RC1) cada 1 ms con el ADC (sin promedio) y, cada 2 pares, manda una línea de texto `xxxx,xxxx\r\n` por la UART: 500 líneas/s. Empieza al encender; no recibe comandos | [VERIFICADO en el código] | §5 B5 a B9 |
+| ¿Qué hace el PC? | Abre el puerto a 115200 8N1, lee línea por línea (hasta `\n`), separa I y Q con `%d,%d`, descarta las líneas con otra forma, convierte los códigos a voltios y dibuja (plano I–Q, histograma, espectro) | [VERIFICADO] (`herramientas/interfaz_micro3.py`); el VI de LabVIEW, guía en `docs/guia_labview_paso_a_paso.md` | §5 B10, §8 |
+| Formato lógico | Texto **ASCII**: `2048,2051\r\n`, números en decimal de 0 a 4095, hasta 11 bytes por línea | [VERIFICADO] | §7, `especificacion_protocolo.md` |
 | Formato físico | UART asíncrona **8N1** (8 datos, sin paridad, 1 parada), primero el bit menos significativo, TTL. PIC a 3,7 V; el TX baja a ≈ 2,54 V por un divisor de 1 kΩ + 2,2 kΩ para el módulo USB-serie de 3,3 V (CP2102); el RX del PIC es de nivel TTL. Tierra común | [VERIFICADO] / [CÁLCULO] (2,54 V) | §5 B8 |
 | Baud rate | **115200** pedido; el chip genera **114 286** (`SP1BRG` = 34), error **−0,79 %** | [CÁLCULO] | §5 B8 |
-| Velocidad de transmisión | Capacidad de la línea: 11 429 B/s (a 114 286 baud). Uso: **7500 B/s** (500 líneas/s de 15 B) = **65,6 %**; queda el 34,4 % libre | [CÁLCULO] | §3 |
-| ¿Cuántos bytes se transmiten? | Hasta 15 por línea; 8 son las cifras de I y Q y 7 son de formato (`I:`, `,Q:`, `\r\n`). En el histograma de 10 000 muestras: ≈ 150 000 B (20 s) | [CÁLCULO] | §7 |
+| Velocidad de transmisión | Capacidad de la línea: 11 429 B/s (a 114 286 baud). Uso: **5500 B/s** (500 líneas/s de 11 B) = **48,1 %**; queda el 51,9 % libre | [CÁLCULO] | §3 |
+| ¿Cuántos bytes se transmiten? | Hasta 15 por línea; 8 son las cifras de I y Q y 3 son de formato (la coma y `\r\n`). En el histograma de 10 000 muestras: ≈ 110 000 B (20 s) | [CÁLCULO] | §7 |
 | ¿Qué formato de transmisión? | ASCII, una línea por par, 500 líneas/s (`ADC_PARES_POR_LINEA` = 2). El ADC muestrea a 1 kHz; al PC llega 1 de cada 2 pares | [VERIFICADO] | §7 |
 | SINAD con 12 bits | Ideal **72 dB** (regla de 6,02 dB por bit = 72,2 dB); la fórmula completa con una senoidal a escala completa da **74,0 dB**. El **requisito** del proyecto es **> 60 dB** | [CÁLCULO] | §8.3 |
 
-> El enunciado de la práctica sugiere líneas ASCII a 9600 o 19200 baud. Nosotros usamos ASCII a 115200 (decisión de la persona, 2026-11-04): a 9600 baud solo cabrían 64 líneas/s. La justificación y lo que se pierde frente a una trama binaria están en `docs/criterios_diseno.md` §5.
+> El enunciado de la práctica sugiere líneas ASCII a 9600 o 19200 baud. Nosotros usamos ASCII a 115200 (decisión de la persona, 2026-11-04): a 9600 baud solo cabrían 87 líneas/s. La justificación y lo que se pierde frente a una trama binaria están en `docs/criterios_diseno.md` §5.
 
 ---
 
@@ -121,10 +121,10 @@ Requisitos técnicos ya vigentes del ADC (detalle en `docs/especificacion_adc.md
 | Formato | 8N1, asíncrono | [VERIFICADO] | |
 | Baud pedido / real | 115200 / 114 286 (error −0,79 %); `SP1BRGH` = 0, `SP1BRGL` = 34 (`BRGH` = 1, `BRG16` = 1) | [CÁLCULO] | `especificacion_diseno_uart.md` §2.2 |
 | Tiempo de bit / byte | 8,68 µs / 86,8 µs (nominal 115200); 8,75 µs / 87,5 µs (real) | [CÁLCULO] | |
-| Línea | hasta 15 bytes = 150 bits = **1,31 ms** con el baud real (1,30 ms a 115200) | [CÁLCULO] | |
-| Capacidad | 11 429 B/s (≈ 760 líneas de 15 B/s como máximo) | [CÁLCULO] | |
-| Ocupación | 500 líneas/s: 7500 B/s, **65,6 %** | [CÁLCULO] | |
-| Buffers | RX 32 B (hoy sin usar); TX 64 B (4 líneas) | [VERIFICADO] | `especificacion_diseno_uart.md` §7 |
+| Línea | hasta 11 bytes = 110 bits = **0,96 ms** con el baud real (0,96 ms a 115200) | [CÁLCULO] | |
+| Capacidad | 11 429 B/s (≈ 1040 líneas de 11 B por segundo como máximo) | [CÁLCULO] | |
+| Ocupación | 500 líneas/s: 5500 B/s, **48,1 %** | [CÁLCULO] | |
+| Buffers | RX 32 B (hoy sin usar); TX 64 B (5 líneas) | [VERIFICADO] | `especificacion_diseno_uart.md` §7 |
 | Memoria usada | sin medir con el firmware actual (anotar del *Dashboard* de MPLAB X) | — | `docs/estado.md` |
 | **Jitter pedido** | **σ del periodo < 10 ns** | requisito de la persona | §8.2 |
 | **SINAD ideal 12 bits** | 72 dB (6,02·N) / 74,0 dB (6,02·N + 1,76) | [CÁLCULO] | |
@@ -147,19 +147,20 @@ flowchart LR
   subgraph P["PIC16F18426 (Práctica 3)"]
     T0["Timer0<br/>1 kHz"] -->|"disparo"| ADC["ADC de 12 bits<br/>RC0 = I, RC1 = Q"]
     ADC --> ISR["ISR del ADC<br/>una muestra por canal"]
-    ISR --> PR["adc_ascii_task<br/>línea I:…,Q:… (500/s)"]
+    ISR --> PR["adc_ascii_par<br/>línea I,Q (500/s)"]
+    ISR --> PWM
     PR --> UT["EUSART1<br/>TX = RC4<br/>115200 8N1"]
-    PWM["PWM6 y PWM7<br/>RA2 y RA4"]
+    PWM["PWM6 y PWM7<br/>RA2 y RA4<br/>duty = código / 4"]
   end
   RES -->|"V_I,OUT y V_Q,OUT"| ADC
-  PWM -.->|"filtro RC y buffer (sin código)"| RES
+  PWM -->|"filtro pasa bajos ≈ 100 Hz"| REC["I y Q reconstruidas<br/>(osciloscopio)"]
   UT -->|"divisor 1 kΩ + 2,2 kΩ en el TX"| USB["USB-serie CP2102<br/>3,3 V"]
   USB --> PC["PC (LabVIEW o Python)<br/>lee líneas, histograma,<br/>SINAD y plano I-Q"]
 ```
 
 *(Diagrama en Mermaid: lo dibuja GitHub y el visor de VS Code con extensión. Para el preinforme se redibuja como figura.)*
 
-Flujo de una muestra, en una línea: `señal de PCB2 → pin RC0/RC1 → S&H → ADC (SAR, 12 bits) → ADRES → ISR (guarda I y Q) → adc_ascii_task (texto) → cola de TX → UART → divisor → CP2102 → PC`.
+Flujo de una muestra, en una línea: `señal de PCB2 → pin RC0/RC1 → S&H → ADC (SAR, 12 bits) → ADRES → ISR (guarda I y Q) → main: pwm_desde_adc (PWM6/PWM7 → filtro → señal) y adc_ascii_par (texto) → cola de TX → UART → divisor → CP2102 → PC`.
 
 ---
 
@@ -234,23 +235,14 @@ TCOFF = 0,05 µs/°C · (T − 25 °C)        TAMP = 2 µs
 - **Duración de la ISR:** sin medir (prueba 4.13).
 - **Estado:** implementado, sin probar.
 
-### B7. Auto-cero con PWM (RC-9)
+### B7. PWM por canal y filtro de reconstrucción (cambio de enfoque, 2026-11-04)
 
-- **Hace:** sustituye los trimmers `I0` y `Q0` por dos PWM filtrados. `V = VDD · duty`.
-- **Valores** [VERIFICADO / CÁLCULO, `docs/especificacion_pwm.md`]: PWM6 en RA2 (I0) y PWM7 en RA4 (Q0); Timer2 con `T2PR` = 255 a Fosc/4 → 64 µs = **15,625 kHz**; 10 bits = 1024 pasos; duty inicial 512 (≈ 1,85 V); filtro RC de 2 etapas propuesto (10 kΩ + 220 nF por etapa) con rizado ≈ 0,10 mV pico a pico en `I0` (≈ 1,0 mV a la salida) y establecimiento al 99 % en ≈ 27 ms (esperar ≥ 50 ms por paso).
-- **Precisión:** ver la tabla siguiente.
-
-| Resolución | Paso en `I0` | Paso a la salida (×10) | Error máximo (medio paso) |
-|---|---|---|---|
-| 10 bits (la actual) | 3,61 mV | 36,1 mV = 40 códigos | ±18 mV = **±20 códigos** |
-| 12 bits | 0,90 mV | 9,0 mV = 10 códigos | ±5 códigos |
-| 13 bits | 0,45 mV | 4,5 mV = 5 códigos | ±2,5 códigos |
-| 14 bits | 0,23 mV | 2,3 mV = 2,5 códigos | ±1,2 códigos |
-
-Para un residuo de ≤ 20 códigos bastan 10 bits; para ≤ 3 códigos hacen falta ≈ 12,7 bits (13); para ≤ 1 código, ≈ 14,3 bits (15) [CÁLCULO]. El residuo de ±20 códigos es el 16 % del cambio de 110 mV y el 30 % del de 60 mV que produjo la discontinuidad en el preinforme P2.
-
-- **Cuánta precisión se necesita** depende de la variación mínima que se quiera detectar, y **eso no está fijado** [SIN VERIFICAR]. Mientras tanto, la propuesta CP-3 de `MASTER_PLAN.md` cambia el criterio de la prueba 5.3 de «≤ 3 cuentas» a «≤ 20 cuentas» y resta el residuo en el PC o en el PIC. El error de auto-cero es de continua: **no entra en el SINAD**, pero sí gasta rango lineal (±18 mV de ±185 mV).
-- **Estado:** diseñado; **sin código** (T-06 y T-07 son propuestas) y el filtro RC no está montado.
+- **Hace:** cada par del ADC fija el duty de un PWM por canal (I → PWM6, Q → PWM7). Un filtro pasa bajos quita la portadora y devuelve la señal analógica que entró por RC0/RC1. `V = VDD · duty`, con la misma `VDD` que el ADC: ganancia 1 sin calibrar.
+- **Valores** [VERIFICADO / CÁLCULO, `docs/especificacion_pwm.md`]: PWM6 en RA2 (I) y PWM7 en RA4 (Q); Timer2 con `T2PR` = 255 a Fosc/4 → 64 µs = **15,625 kHz**; 10 bits = 1024 pasos de 3,61 mV; `duty = (código + 2) >> 2` (12 → 10 bits, máximo 1023); duty inicial 512; se actualiza 1000 veces por segundo (un par cada 1 ms).
+- **Filtro** [PROPUESTA, `docs/especificacion_pwm.md` §6]: Sallen-Key de ganancia 1 con R1 = R2 = 22 kΩ, 100 nF y 47 nF (f0 ≈ 105 Hz, Q ≈ 0,73): −0,01 dB a 20 Hz, −39 dB a 1 kHz, −87 dB a 15,6 kHz, rizado ≈ 0,2 mV pp. Alternativa pasiva: 2 × (10 kΩ + 100 nF), −0,46 dB a 20 Hz y rizado ≈ 0,5 mV pp.
+- **Calidad esperada** [SIMULACIÓN]: SINAD de la salida reconstruida ≈ 54 dB a 20 Hz y ≈ 64 dB a 5 Hz (límite: el 2.º armónico del PWM de flanco final). **No es** el requisito de > 60 dB, que es del ADC (prueba 4.15).
+- **Estado:** código implementado (T-06, `pwm.c/.h`), sin compilar en MPLAB X ni probar; filtro sin montar.
+- **Macro:** el auto-cero con PWM (sustituir los trimmers `I0`/`Q0`, residuo ±20 códigos con 10 bits, filtro de 30 Hz) queda documentado en `docs/macro_autocero_pwm.md`.
 
 ### B8. UART y capa física
 
@@ -262,8 +254,8 @@ Para un residuo de ≤ 20 códigos bastan 10 bits; para ≤ 3 códigos hacen fal
 
 ### B9. Envío en texto ASCII
 
-- **Hace:** `adc_ascii_task()` lee el par con `adc_iq_get()` y, cada `ADC_PARES_POR_LINEA` = 2 pares, escribe `I:xxxx,Q:xxxx\r\n` con `a_decimal()` (restas sucesivas de 1000, 100, 10 y 1: sin `printf` ni división) y lo encola con `tx_string()`. Todo en el programa principal, nunca en la ISR.
-- **Valores:** 500 líneas/s, hasta 15 B por línea, 1,31 ms en la línea cada 2 ms (65,6 %). Si la línea no cabe en el buffer de TX se descarta y se cuenta en `adcLineasPerdidas`.
+- **Hace:** `main` lee el par con `adc_iq_get()` y se lo pasa a `adc_ascii_par(i, q)`, que, cada `ADC_PARES_POR_LINEA` = 2 pares, escribe `xxxx,xxxx\r\n` con `a_decimal()` (restas sucesivas de 1000, 100, 10 y 1: sin `printf` ni división) y lo encola con `tx_string()`. Todo en el programa principal, nunca en la ISR.
+- **Valores:** 500 líneas/s, hasta 11 B por línea, 0,96 ms en la línea cada 2 ms (48,1 %). Si la línea no cabe en el buffer de TX se descarta y se cuenta en `adcLineasPerdidas`.
 - **Sin comandos:** el envío empieza al encender; el PIC no lee el RX.
 - **Estado:** la persona confirmó el 2026-11-04 que el modo ASCII funciona; falta medir con 500 líneas/s (pruebas 2.1 a 2.6).
 - **Detalle:** `docs/especificacion_protocolo.md`.
@@ -272,7 +264,7 @@ Para un residuo de ≤ 20 códigos bastan 10 bits; para ≤ 3 códigos hacen fal
 
 1. Configurar el puerto: 115200, 8 bits de datos, sin paridad, 1 bit de parada, sin control de flujo, **carácter de fin `\n`** habilitado.
 2. Leer una línea en cada vuelta (*VISA Read*).
-3. Separar con `I:%d,Q:%d` (*Scan From String*); si falla, descartar la línea y contarla como mala.
+3. Separar con `%d,%d` (*Scan From String*); si falla, descartar la línea y contarla como mala.
 4. Convertir: `V = código · 3,7 / 4096`; banda base = `(V − Vref2) / 10`.
 5. Mostrar: plano I–Q (eje X = I, eje Y = Q), histograma, espectro y el contador de líneas malas; guardar en CSV (tiempo = n / 500 s).
 6. Diagnóstico «tubo sano / dañado» del enunciado: fuera del alcance de este documento.
@@ -283,7 +275,7 @@ Para un residuo de ≤ 20 códigos bastan 10 bits; para ≤ 3 códigos hacen fal
 
 ### B11. Programa principal
 
-- **Hace:** `while(1) { adc_ascii_task(); }`, sin esperas bloqueantes (prohibido `while(!TXIF)` y `__delay_ms`). Un solo modo: no hay constantes de modo que cambiar.
+- **Hace:** `while(1) { if (adc_iq_get(&i, &q)) { pwm_desde_adc(i, q); adc_ascii_par(i, q); } }`, sin esperas bloqueantes (prohibido `while(!TXIF)` y `__delay_ms`). Un solo modo: no hay constantes de modo que cambiar.
 - **Estado:** implementado; el modo ASCII funciona según la persona (2026-11-04).
 
 ---
@@ -323,20 +315,20 @@ No está a escala; los tiempos exactos van en la tabla de abajo. La duración de
 tiempo (ms)         0         1         2         3         4
 Timer0 (coincide)   ^         ^         ^         ^         ^
 rafaga I y Q        IQ        IQ        IQ        IQ        IQ
-main: linea          [ 1,31 ms   ]       [ 1,31 ms   ]
+main: linea          [ 0,96 ms   ]       [ 0,96 ms   ]
 ```
 
-La ráfaga de I y Q termina hacia los 0,08 ms (caso A de §6.1). Cada 2 pares, `main` escribe la línea en texto (`a_decimal` y `tx_string`, ≈ 0,31 ms estimado, sin medir) y la encola: 15 bytes que tardan 1,31 ms. **Latencia desde la muestra hasta el último byte en la línea ≈ 1,7 ms** (0,1 + ≈ 0,31 + 1,31) [CÁLCULO], sin contar la latencia del USB-serie (sin medir). A 500 líneas/s la línea queda libre el 34,4 % del tiempo: cada línea termina ≈ 0,7 ms antes de que se encole la siguiente.
+La ráfaga de I y Q termina hacia los 0,08 ms (caso A de §6.1). Cada 2 pares, `main` escribe la línea en texto (`a_decimal` y `tx_string`, ≈ 0,28 ms estimado, sin medir) y la encola: 11 bytes que tardan 0,96 ms. **Latencia desde la muestra hasta el último byte en la línea ≈ 1,3 ms** (0,1 + ≈ 0,28 + 0,96) [CÁLCULO], sin contar la latencia del USB-serie (sin medir). A 500 líneas/s la línea queda libre el 51,9 % del tiempo: cada línea termina ≈ 1 ms antes de que se encole la siguiente.
 
-### 6.3 Un byte en la línea (`'I'` = 0x49 = 0100 1001, primero el bit menos significativo)
+### 6.3 Un byte en la línea (`'2'` = 0x32 = 0011 0010, primero el bit menos significativo)
 
 ```
------|____|----|____|____|----|____|____|----|____|----|--------------
+-----|____|____|----|____|____|---------|____|____|----|--------------
  idle  S    D0   D1   D2   D3   D4   D5   D6   D7   P   idle
-  1    0    1    0    0    1    0    0    1    0    1    1
+  1    0    0    1    0    0    1    1    0    0    1    1
 ```
 
-Cada bit dura 8,68 µs a 115200 (8,75 µs con 114 286). Un byte = 10 bits = 87,5 µs. Una línea de 15 bytes seguidos = **1,31 ms**. La FIFO de recepción del chip es de 2 bytes (hoy no se usa: el PIC no recibe comandos).
+Cada bit dura 8,68 µs a 115200 (8,75 µs con 114 286). Un byte = 10 bits = 87,5 µs. Una línea de 11 bytes seguidos = **0,96 ms**. La FIFO de recepción del chip es de 2 bytes (hoy no se usa: el PIC no recibe comandos).
 
 ### 6.4 Otros diagramas que deben salir en el preinforme
 
@@ -361,14 +353,14 @@ Cada bit dura 8,68 µs a 115200 (8,75 µs con 114 286). Un byte = 10 bits = 87,5
 |---|---|---|
 | 1 | El ADC deja 12 bits justificados a la derecha en `ADRESH:ADRESL` | `2048 = 0x0800`, `2051 = 0x0803` |
 | 2 | La ISR guarda el par tal cual (sin promedio) | `I = 2048`, `Q = 2051` |
-| 3 | `adc_ascii_task` cuenta pares; solo cada 2 sigue | — |
+| 3 | `pwm_desde_adc` fija el duty de los dos PWM; `adc_ascii_par` cuenta pares y solo cada 2 sigue | — |
 | 4 | `a_decimal` resta 1000, 100, 10 y 1 las veces que quepa y suma `'0'` (`0x30`) a cada cifra | `2051` → `'2' '0' '5' '1'` = `32 30 35 31` |
-| 5 | Se arma la línea y se encola con `tx_string` | `I:2048,Q:2051\r\n` |
+| 5 | Se arma la línea (I, coma, Q, fin de línea) y se encola con `tx_string` | `2048,2051\r\n` |
 
 ```
-byte:  0  1  2  3  4  5  6  7  8  9  10 11 12 13 14
-      'I' ':' '2' '0' '4' '8' ',' 'Q' ':' '2' '0' '5' '1' CR LF
-       49 3A 32 30 34 38 2C 51 3A 32 30 35 31 0D 0A
+byte:  0   1   2   3   4   5   6   7   8   9   10
+      '2' '0' '4' '8' ',' '2' '0' '5' '1' CR  LF
+       32  30  34  38  2C  32  30  35  31  0D  0A
 ```
 
 ### 7.2 Conversión a voltios (en el PC)
@@ -377,10 +369,10 @@ byte:  0  1  2  3  4  5  6  7  8  9  10 11 12 13 14
 
 ### 7.3 Cuánto ocupa la línea
 
-| Líneas por segundo | Bytes/s (15 B) | Ocupación a 114 286 baud | ¿Cabe? |
+| Líneas por segundo | Bytes/s (11 B) | Ocupación a 114 286 baud | ¿Cabe? |
 |---|---|---|---|
-| 1000 (cada par) | 15 000 | 131 % | no |
-| **500 (cada 2 pares, lo escogido)** | **7500** | **65,6 %** | sí |
+| 1000 (cada par) | 11 000 | 96 % | apenas, sin margen |
+| **500 (cada 2 pares, lo escogido)** | **5500** | **48,1 %** | sí |
 | 20 (cada 50 pares) | 300 | 2,6 % | sí, pero no sirve para SINAD |
 
 El costo en ciclos de la conversión a decimal en el PIC **no se midió** [SIN VERIFICAR]; si hiciera falta, se mide con RC2 y el osciloscopio.
@@ -400,8 +392,8 @@ Ninguna está hecha. Procedimientos completos en `docs/protocolos_prueba.md` (M�
 | Dato | Valor |
 |---|---|
 | Entradas | 0 V (pin a GND, ruido propio del ADC) y `Vref2` ≈ 1,85 V (código ≈ 2048, incluye referencia y fuente) |
-| Captura | 10 000 líneas `I:…,Q:…` → ≈ 150 000 B |
-| Duración | 20 s (500 líneas/s, 65,6 % de la línea; sin promedio) |
+| Captura | 10 000 líneas `I,Q` → ≈ 110 000 B |
+| Duración | 20 s (500 líneas/s, 48,1 % de la línea; sin promedio) |
 | Validez | si `adcLineasPerdidas` sube o el PC mide menos de 500 líneas/s, esa captura no vale |
 | Incertidumbre de la σ medida | 1/√(2·(M − 1)) = **0,71 %** con 10 000 muestras (1,10 % con 4096) [CÁLCULO] |
 | Resultados | σ (en códigos y en µV), códigos distintos, pico a pico ≈ 6 a 6,6 σ, resolución efectiva `log2(FSR/σ)` |
@@ -458,9 +450,9 @@ No está claro qué significa «modular». Dos lecturas razonables:
 
 Hay que preguntar cuál es. El Serial Plotter solo dibuja bien señales de menos de 10 Hz (20 líneas/s).
 
-### 8.5 Auto-cero (RC-9)
+### 8.5 PWM de reconstrucción (el auto-cero pasa a Macro)
 
-Pruebas 3.5, 3.6, 3.8, 3.9, 3.15 y 3.16 (PWM) y 5.3 (residuo) de `docs/protocolos_prueba.md` y `docs/especificacion_pwm.md` §10. Se anota el residuo en códigos del ADC y se compara con §5 (B7).
+Pruebas 3.1 a 3.8 de `docs/protocolos_prueba.md` (Módulo 3): frecuencia, duty que sigue a la entrada, continua y linealidad tras el filtro, rizado, seguimiento de una senoidal a 5 y 20 Hz, retardo e independencia de I y Q. Se comparan con §5 (B7).
 
 ---
 
@@ -482,13 +474,13 @@ Estados: **Cumple (calculado)**: el cálculo lo cumple, falta medir. **Cumple (m
 | 10 | Referencia con poco ruido | `VDD` ratiométrica con `Vref2`; falta medir el ruido de `VDD` (criterio ≤ 26 µV rms) | Por medir | 4.3, §8.1 |
 | 11 | Anti-aliasing: `fc ≤ fs/2` | Filtro de 19,4 Hz frente a 500 Hz; −56 dB a 500 Hz | Cumple (calculado) | – |
 | 12 | Enlace sin pérdidas | Eco a 115200: 20/20, 256/256, 1000/1000 | Cumple (medido, 2026-10-19) | 1.5 a 1.7 |
-| 13 | Capacidad de la línea | 65,6 % a 500 líneas/s de 15 B; 34,4 % libre | Cumple (calculado) | 2.2, 4.14 |
+| 13 | Capacidad de la línea | 48,1 % a 500 líneas/s de 11 B; 51,9 % libre | Cumple, también el < 50 % de la prueba 6.6 (calculado) | 2.2, 4.14 |
 | 14 | Error de baud | −0,79 %; peor caso combinado con el oscilador ≈ −2,8 % (al límite) | Cumple (medido en el eco) | 1.7, P2 |
 | 15 | Niveles lógicos | TX a 2,54 V (≥ 1,9 V); RX TTL con `VIH` 1,73 V frente a 3,3 V | Cumple (calculado) | 1.1 a 1.4 |
-| 16 | Auto-cero con precisión suficiente | PWM de 10 bits: ±20 códigos (±18 mV). El criterio original de ≤ 3 códigos **no es alcanzable** con 10 bits | **No cumple el criterio original**; CP-3 propone ≤ 20 | 5.3 |
-| 17 | Rizado del PWM filtrado | 0,10 mV pico a pico en `I0` frente a un objetivo de 0,09 mV (CP-2): al límite | Cumple (calculado) al límite; **sin hardware** | 3.5 |
+| 16 | PWM que reproduce las muestras | 10 bits, paso 3,61 mV, ganancia 1 (misma `VDD` que el ADC) | Cumple (calculado); **sin probar** | 3.2 a 3.4 |
+| 17 | Filtro de reconstrucción | Sallen-Key ≈ 105 Hz: −0,01 dB a 20 Hz, rizado ≈ 0,2 mV pp; SINAD simulado ≈ 54 dB a 20 Hz | Cumple (calculado); **sin hardware** | 3.5, 3.6 |
 | 18 | Chip y alimentación | PIC16F18426 (no LF) con 2,3 a 5,5 V; PCB2 a 3,7 V | Por confirmar el marcado del chip | 0.1, 0.3 |
-| 19 | Pines | 8 de 12 usados, 1 de reserva (RC2); sin tocar RA0, RA1, RA3 | Cumple | – |
+| 19 | Pines | Usados: RC4 (TX), RC5 (RX), RC0 (I), RC1 (Q), RA2 y RA4 (PWM), RC2 (salida del Timer0 para medir); sin tocar RA0, RA1, RA3 | Cumple | – |
 | 20 | Sin esperas bloqueantes | ISR cortas, `tx_DAT` sin espera, bucle sin `__delay_ms` | Cumple (revisión de código) | 1.9, 1.13 |
 
 ---
@@ -509,7 +501,7 @@ Estados: **Cumple (calculado)**: el cálculo lo cumple, falta medir. **Cumple (m
 |---|---|---|
 | 1 | Qué significa «modular los resultados y ver los 10 Hz» (§8.4) | profesor |
 | 2 | Cómo y con qué instrumento se mide el jitter de 10 ns, y si aplica a Q (§8.2) | profesor y planificador |
-| 3 | Cuánta precisión de auto-cero se necesita: variación mínima a detectar (§5 B7) | profesor y persona |
+| 3 | Qué calidad se pide a la señal reconstruida (amplitud, SINAD, retardo) y si el filtro puede ser pasivo (§5 B7) | profesor |
 | 4 | SINAD > 60 dB: ¿del ADC con senoidal casi a escala completa o con la señal real de PCB2? (§8.3) | profesor |
 | 5 | ¿Con qué ADC y `Vref` salen los 352 µV? | profesor |
 | 6 | Unidad de `ADACQ` (10, 40 o 320 µs) | medición 4.16 |
@@ -525,13 +517,13 @@ Estados: **Cumple (calculado)**: el cálculo lo cumple, falta medir. **Cumple (m
 ## 11. Contradicciones y riesgos detectados
 
 1. **MCC:** el enunciado dice «no usar MCC» y escribir C sobre los registros; el proyecto usa código de MCC (`Micro_Firmware.mc3`) y la persona dice que se puede. Hasta que el profesor lo confirme, el preinforme debe decir qué parte es de MCC y qué parte es a mano.
-2. **ASCII y baud:** el enunciado sugiere ASCII a 9600/19200; el proyecto usa ASCII a 115200 (a 9600 solo cabrían 64 líneas/s). El chat de clase admite «ASCII o el armado de la trama»: se documenta el camino ASCII (§7).
+2. **ASCII y baud:** el enunciado sugiere ASCII a 9600/19200; el proyecto usa ASCII a 115200 (a 9600 solo cabrían 87 líneas/s). El chat de clase admite «ASCII o el armado de la trama»: se documenta el camino ASCII (§7).
 3. **Jitter de 10 ns frente a Q por software** (§8.2). Es el riesgo técnico más grande de esta lista.
 4. **72 dB, 74 dB, 60 dB y 54 dB:** el ideal de 12 bits es 72 a 74 dB; el requisito es > 60 dB; con la señal real de PCB2 el ideal es 54 dB. No mezclar en el texto.
 5. **352 µV frente a 261 µV:** el valor del profesor corresponde a 5 V; con 3,7 V son 261 µV.
 6. **`ADACQ` = 160:** tres unidades posibles; los tiempos del preinforme deben presentarse como «caso A, caso B» hasta medir.
 7. **Periodo del Timer0:** 1000 o 2000 µs (§5 B4). Todo el presupuesto de tiempo supone 1000 µs.
-8. **Auto-cero:** el criterio original (≤ 3 códigos) no se puede cumplir con PWM de 10 bits.
+8. **Auto-cero:** pasa a Macro (cambio de enfoque del profesor, 2026-11-04). En Micro 3 el PWM reconstruye I y Q; su SINAD simulado (≈ 54 dB a 20 Hz) no se debe confundir con el requisito de > 60 dB del ADC.
 9. **`ADC_PARES_POR_LINEA`:** con 50 (20 líneas/s) se ve mejor una señal lenta en el Serial Plotter, pero una medición hecha así no sirve para SINAD ni histograma. Para medir, 2.
 10. **Datos de la Práctica 2 en escalas distintas:** las coordenadas de LabVIEW (60 y 110 mV) no son tensiones de las salidas físicas de PCB2; no compararlas con el rango del ADC sin calibrar (lo dice el mismo preinforme P2).
 
@@ -547,7 +539,7 @@ Estados: **Cumple (calculado)**: el cálculo lo cumple, falta medir. **Cumple (m
 | El SINAD ideal de 12 bits y el presupuesto de 60 dB (calculado) | Ningún SINAD, ruido ni histograma medido del ADC |
 | El jitter teórico a cada frecuencia y el límite de 4 kHz para 72 dB con 10 ns (calculado) | Que σ < 10 ns se cumpla (ni para I ni para Q) |
 | La ocupación de la línea y la forma de cada línea (calculado) | La latencia real del USB-serie |
-| La precisión del PWM de 10 bits y su residuo de ±20 códigos (calculado) | Que el auto-cero funcione (sin código ni filtro montado) |
+| La resolución del PWM de 10 bits y la respuesta del filtro de reconstrucción (calculado y simulado) | Que la señal reconstruida siga a la entrada (código sin probar, filtro sin montar) |
 
 ---
 
@@ -558,14 +550,14 @@ Se copia la del preinforme de la Práctica 2 (portada, resumen y palabras clave,
 | Sección | Contenido | De dónde sale |
 |---|---|---|
 | Portada y Resumen | Qué se diseñó (PIC como adquisición y comunicación de I y Q), valores clave (`fs` 1 kHz, 12 bits, 115200 8N1, líneas ASCII a 500 por segundo) y qué se verificó y qué no. Palabras clave: ADC, UART, corrientes de Eddy, microcontrolador | §2, §3, §12 |
-| 1. Concepción y diseño funcional | 1.1 Requisitos. 1.2 Arquitectura en bloques. 1.3 Interfaz analógica y S&H (`RS`, `TACQ`). 1.4 Muestreo y temporización. 1.5 UART y formato de envío (ASCII). 1.6 Auto-cero con PWM. 1.7 Software del PC | §1, §4, §5 |
+| 1. Concepción y diseño funcional | 1.1 Requisitos. 1.2 Arquitectura en bloques. 1.3 Interfaz analógica y S&H (`RS`, `TACQ`). 1.4 Muestreo y temporización. 1.5 UART y formato de envío (ASCII). 1.6 PWM por canal y filtro de reconstrucción. 1.7 Software del PC | §1, §4, §5 |
 | 2. Resultados y análisis | 2.1 Presupuesto de tiempo (diagramas). 2.2 Resolución, ruido y SINAD ideal. 2.3 Jitter. 2.4 Capacidad de la línea y formato. 2.5 Cumplimiento. 2.6 Plan de verificación (lo que se medirá) | §6, §7, §8, §9 |
 | 3. Implementación | Pines, firmware (archivos, ISR, banderas), circuito de la UART, nivel lógico | §5 B4 a B11, `circuito_uart.svg` |
 | 4. Conclusiones | Qué se cumple por cálculo, qué falta medir, riesgos (§11) | §9, §11, §12 |
 | Referencias | Datasheet DS40001985C (Microchip, 2022); MCP601/1R/2/3/4 (DS21314G); *Fundamentals of Precision ADC Noise Analysis* (TI, SLYY192A, 2025); AN688 (`00688b.pdf`); TB3261; guía de XC8 (50002737C); preinforme de la Práctica 2. Completar autor, año y URL al citar | §14 |
 | Anexos | A: esquemático de la UART. B: fragmentos de código comentados (`adc_iq.c`, `adc_ascii.c`). C: scripts de SINAD e histograma. D: tabla de verificación por pruebas (como la Tabla 6 de la P2) | `docs/`, `herramientas/` |
 
-**Tablas obligatorias:** §3 (valores), §6.1 (tiempos), §9 (cumplimiento), §5 B3 (`TACQ` frente a `RS`), §5 B7 (precisión del auto-cero). **Ecuaciones:** `TACQ`, `σq = q/√12`, SINAD y ENOB, `SNR_jitter`, baud rate, tiempo de una línea.
+**Tablas obligatorias:** §3 (valores), §6.1 (tiempos), §9 (cumplimiento), §5 B3 (`TACQ` frente a `RS`), §5 B7 (PWM y filtro de reconstrucción). **Ecuaciones:** `TACQ`, `σq = q/√12`, SINAD y ENOB, `SNR_jitter`, baud rate, tiempo de una línea.
 
 ---
 
@@ -579,7 +571,8 @@ Se copia la del preinforme de la Práctica 2 (portada, resumen y palabras clave,
 | UART, pines, periféricos, eventos | `docs/especificacion_diseno_uart.md` |
 | Formato de las líneas ASCII y cuentas | `docs/especificacion_protocolo.md` |
 | ADC: tiempos, `TACQ`, jitter, SINAD, referencia, histograma | `docs/especificacion_adc.md` |
-| PWM del auto-cero | `docs/especificacion_pwm.md` |
+| PWM de reconstrucción (Micro 3) | `docs/especificacion_pwm.md` |
+| Auto-cero con PWM (Macro) | `docs/macro_autocero_pwm.md` |
 | Pruebas y criterios | `docs/protocolos_prueba.md` |
 | Datos verificados del chip con páginas | `docs/notas_pic16f18426.md` |
 | Revisión del código de MCC | `docs/revision_codigo_mcc.md` |
