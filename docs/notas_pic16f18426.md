@@ -101,7 +101,7 @@ Se arranca con `RSTOSC = 110` y luego el código sube la frecuencia:
 |---|---|---|---|
 | 1 | `OSCFRQ` (HFFRQ[2:0]) | `0b101` = 16 MHz (con NOSC = 110, sin PLL) | DS p.139 |
 | 2 | `OSCCON1` | `NOSC = 110`, `NDIV = 0000` → `0x60` | DS p.133 |
-| 3 | esperar | `OSCCON3[ORDY] = 1` (oscilador listo) | DS p.~137 |
+| 3 | esperar | `OSCCON3[ORDY] = 1` (oscilador listo). **El código actual no lo espera:** `OSCILLATOR_Initialize()` de `mcc.c` escribe `OSCCON1 = 0x60` y `OSCFRQ = 0x05` y sigue | DS p.~137 |
 
 Tabla de `OSCFRQ` (DS p.139): `110`→32 MHz · `101`→16 MHz · `100`→12 MHz · `011`→8 MHz · `010`→4 MHz · `001`→2 MHz · `000`→1 MHz.
 

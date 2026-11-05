@@ -1,6 +1,6 @@
 # Criterios de diseño y valores escogidos
 
-Proyecto Micro 3 · Enlace UART PC ↔ PIC (Fase 1) · Fecha: 2026-10-16 · Actualizado: 2026-10-30 (ADC, §11)
+Proyecto Micro 3 · Enlace UART PC ↔ PIC (Fase 1) · Fecha: 2026-10-16 · Actualizado: 2026-11-05 (coherencia con el código: PWM, Timer0, sin anti-aliasing)
 
 > **Para qué sirve:** explicar **por qué** se escogió cada valor (reloj, baud, formato, pines, niveles, buffers, formato de envío), qué alternativas se descartaron y qué falta confirmar. El detalle técnico y las páginas del datasheet están en `especificacion_diseno_uart.md` y `notas_pic16f18426.md`. Las pruebas están en `protocolos_prueba.md`.
 >
@@ -13,7 +13,7 @@ Proyecto Micro 3 · Enlace UART PC ↔ PIC (Fase 1) · Fecha: 2026-10-16 · Actu
 | # | Parámetro | Valor escogido | Estado |
 |---|---|---|---|
 | 1 | Microcontrolador | PIC16F18426 (14 pines, 28 KB flash, 2 KB RAM) | decidido |
-| 2 | Estilo de código | C "bare-metal" sobre registros. Sin MCC | regla de la práctica |
+| 2 | Estilo de código | C sobre registros, con el código de MCC como base (revisado en `docs/revision_codigo_mcc.md`) | la persona (2026-10-19); el enunciado dice «sin MCC»: confirmar con el profesor |
 | 3 | Reloj | HFINTOSC interno a **16 MHz**, sin cristal | [PROPUESTA] |
 | 4 | Baud rate | **115200** (`SP1BRG = 34`, error −0,79 %) | [PROPUESTA] |
 | 5 | Formato de byte | **8N1** (8 datos, sin paridad, 1 parada) | [PROPUESTA] |
@@ -21,16 +21,19 @@ Proyecto Micro 3 · Enlace UART PC ↔ PIC (Fase 1) · Fecha: 2026-10-16 · Actu
 | 7 | Buffers | Circulares (cabeza y cola): RX de 32 bytes, TX de 64 bytes. Motivos en §6.1 | [PROPUESTA] |
 | 8 | Interrupciones | RX siempre activa. TX solo mientras haya datos. Una sola ISR | [VERIFICADO] |
 | 9 | Pines UART | TX = RC4 (pin 6), RX = RC5 (pin 5) | [PROPUESTA] |
-| 10 | Nivel de entrada de RX | TTL (`INLVLC5 = 0`) | [VERIFICADO] |
+| 10 | Nivel de entrada de RX | TTL (`INLVLC5 = 0`) | decidido, **sin aplicar**: **el código actual lo deja en Schmitt** (`INLVLC = 0x3F` en `pin_manager.c`; VIH = 2,96 V) |
 | 11 | Alimentación | 3,7 V (fuente Keysight E36233A, según el preinforme) | confirmado |
 | 12 | Adaptador USB-serie | Módulo CP2102 (TTL) con el nivel lógico en 3,3 V | por confirmar el módulo |
 | 13 | Conexión PIC → adaptador | Divisor 1 kΩ + 2,2 kΩ en el TX del PIC | [PROPUESTA] |
 | 14 | Visualización I vs Q | En el PC (LabVIEW o Python), por UART | decidido |
 | 15 | Referencia del ADC (Fase 2) | VDD = 3,7 V (`ADREF = 0x00`) | en el código; falta confirmar con el profesor |
-| 16 | Muestreo del ADC | 1 kHz, disparado por Timer0 (hardware); I y Q convertidos en ráfaga dentro de 1 ms | profesor; código T-09 sin probar. Motivos en §11 |
+| 16 | Muestreo del ADC | 1 kHz, disparado por Timer0 (hardware); I y Q convertidos en ráfaga dentro de 1 ms: 1000 pares/s, 1 kHz por canal | profesor; código T-09 sin probar. Motivos en §11 |
 | 17 | Promedio del ADC | **ninguno**: una muestra por par (el PC recibe 1 de cada 2: 500 pares/s) | decisión de la persona (2026-11-03); reemplaza D-1 |
 | 18 | Canales del ADC | I = RC0 y Q = RC1, un solo ADC multiplexado | decidido |
 | 19 | **SINAD del ADC** | **> 60 dB** (ENOB > 9,67 bits) | requisito de la persona (2026-10-30) |
+| 20 | Timer0 | 8 bits, Fosc/4, 1:16, `TMR0H` = 249 → 1 ms; dispara el ADC (`ADACT` = 0x02); `TMR0_out` en RC2 (cuadrada de 500 Hz) | código T-09 |
+| 21 | PWM | Timer2 a Fosc/4, `T2PR` = 255 → 15,625 kHz, 10 bits; PWM6 en RA2 (I) y PWM7 en RA4 (Q); `duty = (código + 2) >> 2` con cada par (1000/s) | cambio de enfoque del profesor (2026-11-04); código T-06 sin probar |
+| 22 | Filtro anti-aliasing | **ninguno** en esta entrega | indicación de la persona (2026-11-05) |
 
 ---
 
@@ -54,7 +57,7 @@ Proyecto Micro 3 · Enlace UART PC ↔ PIC (Fase 1) · Fecha: 2026-10-16 · Actu
 | 32 MHz | +0,64 %. Mejor error, pero más consumo. Queda como reserva si hay errores de framing |
 | Cristal externo | Ocupa 2 pines. No se necesita |
 
-**Cómo se llega a 16 MHz:** `RSTOSC = 110` (arranca a 1 MHz) y el código sube a 16 MHz con `OSCFRQ` y `OSCCON1`, esperando `OSCCON3[ORDY]`. El código de MCC generado en clase queda a 1 MHz (`OSCCON1 = 0x62`, `OSCFRQ = 0x02`), que no sirve para 115200.
+**Cómo se llega a 16 MHz:** `RSTOSC = 110` (HFINT1: arranca a 1 MHz) y `OSCILLATOR_Initialize()` de `mcc.c` sube a 16 MHz con `OSCFRQ = 0x05` y `OSCCON1 = 0x60` (NOSC = HFINTOSC, NDIV = 1); no espera `OSCCON3[ORDY]`. El primer MCC de clase quedaba a 1 MHz (`OSCCON1 = 0x62`, `OSCFRQ = 0x02`); el regenerado el 2026-10-19 ya trae los 16 MHz.
 
 ---
 
@@ -116,7 +119,7 @@ reposo ‾‾‾|START|D0|D1|D2|D3|D4|D5|D6|D7|STOP|‾‾‾ reposo
 | Verificación | Solo la forma de la línea | No hay suma de verificación ni número de secuencia; con 8N1 sin paridad, un byte dañado casi siempre rompe la forma |
 | Sentido | Solo PIC → PC | El PIC empieza a mandar al encender; no hay comandos |
 
-**Lo que se pierde frente a una trama binaria:** fs = 500 Hz en el PC en vez de 1000, ninguna detección de líneas perdidas y ningún comando del PC al PIC (el control del PWM, T-07, queda por replantear). Detalle: `docs/especificacion_protocolo.md`.
+**Lo que se pierde frente a una trama binaria:** fs = 500 Hz en el PC en vez de 1000, ninguna detección de líneas perdidas y ningún comando del PC al PIC (el control del PWM desde el PC, T-07, pasa a Macro). Detalle: `docs/especificacion_protocolo.md`.
 
 ---
 
@@ -152,7 +155,7 @@ reposo ‾‾‾|START|D0|D1|D2|D3|D4|D5|D6|D7|STOP|‾‾‾ reposo
 | **TX** | **64** | 63 | 5 | 5,5 ms |
 
 **Por qué 32 en RX**
-- Hoy el PIC no recibe comandos: el buffer de RX solo se llena si el PC manda algo, y nadie lo lee. Se deja el tamaño por si se agregan comandos de texto (T-07).
+- Hoy el PIC no recibe comandos: el buffer de RX solo se llena si el PC manda algo, y nadie lo lee. Se deja el tamaño por si se agregan comandos de texto (T-07, ahora en Macro).
 - Si se usa, lo que hay que cubrir es el tiempo que el programa principal pueda tardar en volver a leer. Con 31 bytes útiles son 2,7 ms de margen.
 - Aquí el buffer es el segundo escalón: el hardware solo tiene una FIFO de 2 bytes, y la ISR debe vaciarla en menos de unos 174 µs.
 
@@ -273,6 +276,7 @@ Fuente de los niveles del CP2102: datasheet del CP2102-GMR (Silicon Labs), secci
 | 2026-11-03 | **Se quita el promedio del ADC** (antes 5 pares, D-1): cada par lleva una sola muestra de I y de Q | Decisión de la persona. Se pierde la mejora de ruido del promedio (hasta 7 dB) |
 | 2026-11-04 | **Solo texto ASCII**: el PIC manda `xxxx,xxxx\r\n` cada 2 pares (500 líneas/s, 48,1 % de la línea) y no recibe comandos. Se borran `crc8.*` y `protocol.*`, se retira T-04 y `adc_prueba.*` pasa a `adc_ascii.*` (§5) | Decisión de la persona: el receptor de la trama binaria en LabVIEW era muy largo; el texto se lee con *VISA Read* + *Scan From String*. Costo: fs = 500 Hz en el PC, sin detección de líneas perdidas, sin comandos (T-07 por replantear) |
 | 2026-11-04 | La línea pierde los nombres: de `I:2048,Q:2051\r\n` (15 bytes) a `2048,2051\r\n` (11 bytes; primero I, después Q). Con 500 líneas/s la línea pasa del 65,6 % al **48,1 %** | Decisión de la persona: ver solo los valores. Cumple el < 50 % de la prueba 6.6. El PC depende del orden de los números |
+| 2026-11-05 | **Sin filtro anti-aliasing** en esta entrega: la prueba 4.7 y el criterio de Nyquist del enunciado (§3.2) quedan pendientes | Indicación de la persona. El ADC muestrea a 1 kHz (Nyquist 500 Hz) y el PC recibe 500 Hz (Nyquist 250 Hz) |
 | 2026-11-04 | **Cambio de enfoque del profesor:** en Micro 3, un PWM por canal reproduce las muestras del ADC (`duty = (código + 2) >> 2`, PWM6 en RA2 y PWM7 en RA4, Timer2 con `T2PR` = 255) y un filtro pasa bajos de ≈ 100 Hz devuelve la señal analógica (`docs/especificacion_pwm.md`). El auto-cero con PWM (I0/Q0, pulsador, lazo) pasa a Macro (`docs/macro_autocero_pwm.md`) | Decisión del profesor. Se conservan los pines, el Timer2 y los 10 bits ya decididos |
 
 
@@ -285,7 +289,7 @@ Fuente de los niveles del CP2102: datasheet del CP2102-GMR (Silicon Labs), secci
 | Decisión | Valor | Por qué | Alternativas descartadas |
 |---|---|---|---|
 | Referencia | `VDD` = 3,7 V | Cubre 0 a 3,7 V (los rieles de PCB2) sin recorte. `Vref2` sale de un divisor del mismo riel, así que el nivel de reposo es ratiométrico (TI Ec. 26). No usa pines: RA1/`ADCVREF+` es ICSPCLK | FVR de 4,096 V (no puede superar `VDD`, DS p.491); FVR de 2,048 V (recorta toda señal sobre 2,048 V; el rango lineal de 1,85 ± 0,185 V llega a 2,035 V, a 13 mV del recorte); `VDD` de 5 V (la placa trabaja a 3,7 V) |
-| Muestreo | 1 kHz | Pedido por el profesor. La señal está limitada a ≈ 20 Hz: sobremuestreo de 25 [CÁLCULO]. Que el filtro de 20 Hz de PCB2 evite el aliasing se comprueba en la prueba 4.7 | – |
+| Muestreo | 1 kHz por canal (I y Q en cada disparo: 1000 pares/s); al PC llegan 500 pares/s | Pedido por el profesor. La señal útil está por debajo de ≈ 20 Hz: sobremuestreo de 25 [CÁLCULO]. **En esta entrega no hay filtro anti-aliasing** (persona, 2026-11-05): lo que llegue al pin por encima de 500 Hz se pliega en el ADC, y por encima de 250 Hz en el PC. La prueba 4.7 queda pendiente | – |
 | Disparo | Timer0 por hardware (`ADACT`) | El instante de muestreo de I no depende del software (el jitter que importa es el del reloj de muestreo, no el de conversión). Sin esperas | `__delay_ms` o iniciar por software: prohibido y con jitter |
 | I y Q | un ADC multiplexado, en ráfaga | Un solo convertidor. Sesgo entre canales de 0,5 % a 20 Hz si la adquisición es de 10 µs, 4,4 % si es de 320 µs [CÁLCULO] | Alternar canales a 2 kHz (sesgo de 500 µs, 6 %); ADC de muestreo simultáneo (innecesario) |
 | Jitter de Q | por vigilar | Q lo arranca la ISR, así que hereda la variación de latencia de las ISR de la UART (hasta 25 µs ⇒ 61 dB a 20 Hz) [CÁLCULO] | Disparar Q por hardware (a decidir si la prueba 4.17 falla) |

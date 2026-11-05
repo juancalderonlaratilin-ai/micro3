@@ -1,6 +1,6 @@
 # Especificación del ADC: muestreo de I y Q (tarea T-09)
 
-Proyecto Micro 3 · Fase 2 · Fecha: 2026-10-30 · Estado: **código implementado (T-09), sin probar en el chip**. Los requisitos de §1 vienen del profesor y de la persona.
+Proyecto Micro 3 · Fase 2 · Fecha: 2026-10-30 · Revisado: 2026-11-05 · Estado: **código implementado (T-09), compilado con XC8 2.40, sin probar en el chip**. Los requisitos de §1 vienen del profesor y de la persona.
 
 > **Para qué sirve:** reunir en un solo sitio qué pidió el profesor para el ADC, qué hace el código que ya existe, los presupuestos de tiempo, ruido, jitter y SINAD, y las recomendaciones de hardware y firmware. Reemplaza al borrador suelto `ADC_especificaciones_y_recomendaciones.md`.
 >
@@ -24,6 +24,7 @@ Proyecto Micro 3 · Fase 2 · Fecha: 2026-10-30 · Estado: **código implementad
 | R8 | Medición de ruido | histograma de muestras y conteo de códigos | profesor |
 | R9 | Canales | I = RC0 (`ANC0`), Q = RC1 (`ANC1`), un solo ADC multiplexado | decisión de la persona |
 | R10 | Criterio de la referencia | justificar la `Vref` y el ruido de referencia y fuente | profesor |
+| R11 | Filtro anti-aliasing | **ninguno en esta entrega**; el criterio `fc ≤ fs/2` del enunciado queda pendiente (prueba 4.7) | persona, 2026-11-05 |
 
 ## 2. Qué hace el código actual (T-09) [VERIFICADO en el código del zip]
 
@@ -45,6 +46,8 @@ main:   adc_iq_get() ──► pwm_desde_adc() (T-06) y adc_ascii_par() ──�
 | Canales | `CANAL_I = 0x10` (RC0/ANC0), `CANAL_Q = 0x11` (RC1/ANC1) (DS p.528) | `adcc.h` |
 | Referencia | `ADREF = 0x00`: `ADPREF = VDD`, `ADNREF = VSS`; ver §7.1 | `adcc.c` |
 | Interrupción | `ADIE = 1`; `interrupt_manager.c` llama a `adc_iq_isr()` si `ADIE` y `ADIF` | cambio C-11 (§11) |
+| Frecuencia por canal | **1 kHz para I y 1 kHz para Q**: en cada disparo se convierten los dos (Q ≈ 38,5 µs después de I en el caso A, §10) | `adc_iq.c` |
+| Quién usa cada par | el PWM, **todos** (1000/s, `pwm_desde_adc`); la UART, 1 de cada 2 (500 líneas/s, `adc_ascii_par`) | `main.c` |
 | Promedio | **ninguno** (desde el 2026-11-03; reemplaza D-1): una muestra de I y una de Q por par, 1000 pares/s en el PIC; al PC llegan 500/s | `adc_iq.c`, `adc_ascii.h` |
 | Pin de prueba | `ADC_PIN_PRUEBA = 2`: RC2 saca la salida del Timer0 (cuadrada de 500 Hz, cada flanco = un disparo). Con `1`, RC2 sube mientras corre `adc_iq_isr()` (D-4) | `adc_iq.h` |
 | Contadores | `adcParesPerdidos` y `adcLineasPerdidas` deben quedar en 0 | `adc_iq.c`, `adc_ascii.c` |
@@ -173,7 +176,7 @@ El golpe de carga es pequeño y no un escalón completo, así que 9 `τ` es una 
 - [ ] Anotar el modelo del opa de la etapa final de I y Q. Según `CAMBIOS_OPAMPS_Y_AMPLITUDES_2026-10-16.md` (en el proyecto de Claude, no está en `docs/`), hoy PCB2 usa TS924A y la BOM puede pasar a MCP604 o TLV9064.
 - [x] Datasheet del MCP604 en `docs/MCP601-2.PDF` (lo puso la persona el 2026-10-30). Los de TS924A y TLV9064, si se usan, faltan. **Aviso:** `.gitignore` tiene `docs/*.pdf` (PDFs pesados de fabricante), así que los PDF no se suben a GitHub salvo con `git add -f`.
 - [ ] Conseguir un número de `Zout`: el datasheet del MCP604 **no lo da**. Opciones [PROPUESTA]: simular la etapa final en LTspice con el modelo SPICE del MCP604 (impedancia de salida contra frecuencia, a ≈ 1 MHz) o medir en la placa cuánto cambia el voltaje de salida al conectar una carga conocida. Anotar el valor como `RS`.
-- [ ] Sumar a `RS` cualquier resistencia en serie o RC antialias en el pin del PIC.
+- [ ] Sumar a `RS` cualquier resistencia en serie en el pin del PIC (en esta entrega no hay RC anti-aliasing).
 - [ ] Recalcular §3.1 con ese `RS` y fijar `ADACQ`.
 - [ ] Comprobar con la prueba 4.8, **también con la salida real de PCB2** y no solo con el generador.
 
@@ -296,7 +299,7 @@ Comprobado con capturas sintéticas (12 bits, 3,7 V, 1,7 V de amplitud): sin rui
 
 **Criterio propuesto** [PROPUESTA]: que la referencia aporte ≤ 10 % de `σq`. Con `σq = 261 µV`, `V_N,ref ≤ 26 µV rms` a escala completa. El total sube solo de 261 a 262 µV.
 
-> El PDF de TI analiza ADC **delta-sigma**, cuyo filtro digital limita el ancho de banda de ruido. El ADC del PIC es un **SAR sin ese filtro**: el ruido de banda ancha de `VDD` se muestrea y se pliega a 0–500 Hz. Se filtra con capacitores en el pin (desde el 2026-11-03 ya no hay promedio digital).
+> El PDF de TI analiza ADC **delta-sigma**, cuyo filtro digital limita el ancho de banda de ruido. El ADC del PIC es un **SAR sin ese filtro**: el ruido de banda ancha de `VDD` se muestrea y se pliega a 0–500 Hz. Se podría filtrar con capacitores en el pin; en esta entrega no hay filtro anti-aliasing ni promedio digital.
 
 - Si `VREF = VDD`, un rizado de 10 mV en la fuente con `Vin/Vref = 0,5` aporta 5 mV, unos 5,5 LSB, **salvo que la señal también varíe con `VDD`**. `Vref2 ≈ 1,85 V` sale de un divisor del riel de 3,7 V (preinforme §1.2), así que el nivel de reposo es ratiométrico y esa parte se cancela [CÁLCULO, supuesto: ambos del mismo riel]. Solo la parte de la señal (±185 mV) no se cancela.
 - TI (Cap. 6, págs. 65–79) trata el ruido de la fuente con el PSRR. Para mejorarlo propone optimizar el *layout* y planificar las frecuencias; para depurar, agregar un LDO, comprobar las especificaciones de la fuente, aumentar los capacitores de desacoplo del ADC y **reemplazar las fuentes por una de banco, una por una** (p.79). El LDO y el desacoplo son lo aplicable aquí; el análisis de TI es de ADC delta-sigma.
@@ -418,7 +421,8 @@ El código cita `docs/instrucciones_claude_code_adc.md`, que **no estaba en la c
 9. Modelo del opa de las salidas I y Q de PCB2 (TS924A o MCP604) y su `Zout`: el datasheet del MCP604 ya está en `docs/MCP601-2.PDF` y no da el número (§3.2).
 10. Si `Vref` se queda en `VDD` o se pasa a FVR o a una referencia externa (§7.1).
 11. `RSS` a 3,7 V (gráfica de la Fig. 32-4 del DS) y por qué se eligió Timer0 y no Timer4 o Timer6 (§2.1, §3.1).
-12. Si el `TMR0_overflow` que dispara el ADC es el pulso de cada coincidencia (1000 µs) o la salida que conmuta (2000 µs); lo decide la prueba 4.5 (§2.1).
+12. Si el `TMR0_overflow` que dispara el ADC es el pulso de cada coincidencia (1000 µs) o la salida que conmuta (2000 µs); lo decide la prueba 4.5 (§2.1). El comentario de `adc_iq.h` supone lo primero (cada flanco de `TMR0_out` es un disparo).
+13. Filtro anti-aliasing: no hay en esta entrega; definir si se agrega y con qué corte (R11).
 
 ## 14. Recomendaciones
 
@@ -428,13 +432,13 @@ El código cita `docs/instrucciones_claude_code_adc.md`, que **no estaba en la c
 - [ ] Salida de PCB2 de baja impedancia (op-amp), ≤ 10 kΩ. Anotar su `Zout` (§3.2).
 - [ ] Tierra analógica y digital unidas en un solo punto cerca del ADC; PWM, UART y reloj lejos de `V_I,OUT`, `V_Q,OUT` y la referencia.
 - [ ] *(Macro)* Rizado de I0/Q0 ≲ 90 µV pp.
-- [ ] Revisar la red de 60 Hz: el filtro de 20 Hz la atenúa solo ≈ 20 dB [CÁLCULO, Butterworth ideal con `fn = 19,4 Hz`].
+- [ ] Revisar la red de 60 Hz: el filtro de 20 Hz de PCB2 la atenúa solo ≈ 20 dB [CÁLCULO, Butterworth ideal con `fn = 19,4 Hz`]; en esta entrega no hay otro filtro antes del ADC.
 
 **Firmware**
 - [ ] Disparo por Timer0 (ya está). Nada de retardos por software.
 - [ ] Confirmar `ADACQ` con la prueba 4.16 y calcularlo con la fórmula de §3.1 (con 20 % de margen); bajarlo si la adquisición real es de 320 µs.
 - [ ] Mantener cortas las ISR de la UART (pruebas 1.10 y 1.11) para el jitter de Q.
-- [ ] Detectar saturación (códigos cerca de 0 o 4095) y pasar a ERROR/ALARM.
+- [ ] Detectar saturación (códigos cerca de 0 o 4095). Hoy no hay máquina de estados (ERROR/ALARM del enunciado): lo avisa la interfaz del PC.
 - [ ] Revisar en el depurador que `adcLineasPerdidas` y `adcParesPerdidos` queden en 0 a 500 líneas/s.
 
 **Validación:** histograma (§8), SINAD (§6), periodo de muestreo y duración de la ISR con RC2 (pruebas 4.5, 4.13 y 4.16) y jitter de Q (4.17).

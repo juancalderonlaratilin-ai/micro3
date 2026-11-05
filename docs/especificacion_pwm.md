@@ -1,6 +1,6 @@
 # Especificación del PWM: reconstruir I y Q a partir de las muestras (T-06)
 
-Proyecto Micro 3 · Fecha: 2026-11-04 · Estado: **implementada, sin probar** (`firmware/Micro_Firmware.X/pwm.c/.h`; sin compilar con XC8)
+Proyecto Micro 3 · Fecha: 2026-11-04 · Revisado: 2026-11-05 · Estado: **implementada, sin probar** (`firmware/Micro_Firmware.X/pwm.c/.h`; compilada con XC8 2.40 el 2026-11-04, 0 errores)
 
 > **Cambio de enfoque del profesor (2026-11-04).** En Micro 3 el PWM ya **no** es el auto-cero (I0/Q0 como niveles de continua): eso pasa a **Macro** y quedó guardado en `docs/macro_autocero_pwm.md`, `docs/criterios_filtro_pwm.md` y `docs/guia_filtro_pwm_dac.md`.
 >
@@ -23,6 +23,10 @@ Q (RC1) ──► código 0..4095 ──► duty 0..1023 en RA4 ──► R-C / 
 3. El hardware aplica el duty nuevo al empezar el siguiente periodo de 64 µs. Sin interrupciones.
 4. El filtro pasa bajos se queda con el promedio del PWM: `V = VDD · duty / 1024`.
 5. El mismo par se sigue mandando al PC como texto (`adc_ascii_par`, 500 líneas/s).
+
+**Las señales que usa el PWM son las muestreadas:** el duty sale del mismo par (I, Q) que entrega `adc_iq_get`, una vez por milisegundo (1 kHz por canal). El PWM usa todos los pares; la UART, 1 de cada 2.
+
+**El filtro de este documento es el de reconstrucción** (después del PWM). Antes del ADC **no hay filtro anti-aliasing** en esta entrega (indicación de la persona, 2026-11-05).
 
 **Ganancia 1:** el ADC mide con referencia VDD y el PWM sale entre 0 y VDD, así que la salida filtrada repite la tensión de entrada: código 2048 → duty 512 → 1,850 V [CÁLCULO]. No hace falta calibrar la escala.
 
@@ -55,7 +59,7 @@ Q (RC1) ──► código 0..4095 ──► duty 0..1023 en RA4 ──► R-C / 
 | `PPS1WAY` | ya está en OFF (C-01) | `estado.md` |
 | RA4 | `FEXTOSC = 100` (sin oscilador externo): OSC2 no se usa y RA4 queda libre | `notas` §4 |
 
-Los nombres en C (`PWM6CON`, `PWM6DCH`, `PWM6DCL`, `PWM7…`, `T2CON`, `T2CLKCON`, `T2HLT`, `T2PR`, `T2TMR`, `RA2PPS`, `RA4PPS`, `ANSELAbits.ANSA2`, `TRISAbits.TRISA2`, `LATAbits.LATA2`) siguen el patrón de MCC para esta familia; **se confirman al compilar** con el `pic16f18426.h` de XC8 2.40 (si uno no existe, la compilación falla en esa línea). `T2…` ya están confirmados en el `.h` (`notas` §9.3).
+Los nombres en C (`PWM6CON`, `PWM6DCH`, `PWM6DCL`, `PWM7…`, `T2CON`, `T2CLKCON`, `T2HLT`, `T2PR`, `T2TMR`, `RA2PPS`, `RA4PPS`, `ANSELAbits.ANSA2`, `TRISAbits.TRISA2`, `LATAbits.LATA2`) siguen el patrón de MCC para esta familia y **están confirmados** en el `pic16f18426.h` de XC8 2.40 (`pwm.c` compila sin errores; `notas` §9.1 y §9.3). Los códigos PPS `0x0D`/`0x0E` y el reset de `CCPTMRS1` vienen del datasheet y falta probarlos en el chip.
 
 **Timers ocupados:** Timer0 (disparo del ADC) y **Timer2 (PWM)**. Timer4 y Timer6 siguen libres.
 
@@ -163,7 +167,7 @@ Una frecuencia de corte de **≈ 100 Hz** cumple las tres: queda 5 veces por enc
 | **B. RC pasivo de 2 etapas** (para la protoboard, sin op-amp): 10 kΩ + 100 nF, dos veces | 60 Hz | −0,03 dB | −0,46 dB, −21° | −33 dB | −80 dB | ≈ 0,49 mV pp; salida de alta impedancia: medir con punta ×10 |
 | C. La escalera de la placa Micro3 (R50–R52 10 kΩ, C 1 µF, mezcla con `VREF_BUF`), en `TP_PWM_I` / `TP_PWM_Q` | polos en 11 y 44 Hz | −0,8 dB | **−6,9 dB** | −66 dB | −114 dB | despreciable |
 
-**Sobre la opción C (placa):** esa red se diseñó para el auto-cero (ahora Macro). Su salida es `0,25 · Vpwm + 0,75 · Vref` (la señal sale **reducida a la cuarta parte** alrededor de 1,85 V) y es lenta: sirve para mirar señales de unos pocos hertz (el anti-aliasing de la placa ya corta en ≈ 5 Hz), no para 20 Hz. Si se usa la placa: medir en `TP_PWM_I`/`TP_PWM_Q`, dejar **JP_AZEN en 1–2** y **no** conectar J3 (I0_CMD/Q0_CMD) a la placa de la Práctica 2, o la señal reconstruida volvería a entrar como cero y se cerraría un lazo.
+**Sobre la opción C (placa):** esa red se diseñó para el auto-cero (ahora Macro). Su salida es `0,25 · Vpwm + 0,75 · Vref` (la señal sale **reducida a la cuarta parte** alrededor de 1,85 V) y es lenta: sirve para mirar señales de unos pocos hertz, no para 20 Hz. Si se usa la placa: medir en `TP_PWM_I`/`TP_PWM_Q`, dejar **JP_AZEN en 1–2** y **no** conectar J3 (I0_CMD/Q0_CMD) a la placa de la Práctica 2, o la señal reconstruida volvería a entrar como cero y se cerraría un lazo.
 
 ### 6.3 Qué se espera de la salida [SIMULACIÓN]
 
@@ -186,7 +190,7 @@ Módulo 3 de `docs/protocolos_prueba.md` (3.1 a 3.8): frecuencia del PWM, duty q
 
 ## 8. Lo que no se verificó
 
-- Nada de esto se ha compilado con XC8 ni medido: los nombres de registros se confirman al compilar.
+- Compilado con XC8 2.40 (2026-11-04, nombres comprobados en el `.h`), pero nada se ha medido en el chip.
 - El filtro A/B no está montado; los valores son cálculos con componentes ideales.
 - El SINAD de la salida es una simulación con un filtro ideal; el op-amp real, las tolerancias y el ruido de VDD lo bajan.
 - Si el profesor quiere una frecuencia de corte o una ganancia distintas para la salida reconstruida.

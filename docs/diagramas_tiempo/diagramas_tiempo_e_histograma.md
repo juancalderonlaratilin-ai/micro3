@@ -1,6 +1,6 @@
 # Diagramas de tiempo y plan del histograma del periodo
 
-Proyecto Micro 3 · 2026-11-04 · Firmware: ADC a 1 kHz sin promedio; envío en texto ASCII `xxxx,xxxx\r\n`, una línea cada 2 pares (500 líneas/s) a 115200.
+Proyecto Micro 3 · 2026-11-04 (revisado el 2026-11-05) · Firmware: ADC a 1 kHz sin promedio (I y Q en cada disparo); PWM6/PWM7 actualizados con cada par (T-06); envío en texto ASCII `xxxx,xxxx\r\n`, una línea cada 2 pares (500 líneas/s) a 115200. Sin filtro anti-aliasing.
 
 **Etiquetas:** **[DS]** = datasheet del PIC16F18426; **[CÁLCULO]** = cuenta exacta con los registros del código; **[ESTIMADO]** = cuenta aproximada de instrucciones de XC8 (no hay listado del código actual), hay que medirla. En el preinforme, lo [ESTIMADO] va como «previsto» hasta medirlo.
 
@@ -17,6 +17,7 @@ Proyecto Micro 3 · 2026-11-04 · Firmware: ADC a 1 kHz sin promedio; envío en 
 | Ráfaga completa I + Q | ≈ 97 µs (caso A) | [ESTIMADO] | margen de ≈ 90 % sobre 1 ms |
 | Sesgo entre la muestra de I y la de Q | ≈ 46 µs (caso A) | [ESTIMADO] | |
 | `adc_iq_get()` y contar el par | ≈ 5 µs | [ESTIMADO] | |
+| `pwm_desde_adc()` (dos `a_duty` y dos `pwm_set`), con cada par | sin estimar; **no está dibujado en las figuras** | [POR MEDIR] | corre antes de `adc_ascii_par()` en `main.c` |
 | **Conversión a decimal/ASCII** | ≈ 95 µs por valor de 4 cifras | [ESTIMADO] | `a_decimal()`: restas de 1000, 100, 10 y 1 |
 | Texto fijo (`,` y `\r\n`) | ≈ 5 µs | [ESTIMADO] | |
 | Encolar 11 bytes (`tx_string`) | ≈ 80 µs | [ESTIMADO] | largo de la cadena + copia |

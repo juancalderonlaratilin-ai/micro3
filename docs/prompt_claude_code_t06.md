@@ -1,5 +1,7 @@
 # Prompt para Claude Code: T-06 (PWM de reconstrucción) sobre el envío ASCII
 
+> **Ya ejecutado (2026-11-04):** Claude Code revisó y compiló T-06 con XC8 2.40 (0 errores; ver `docs/estado.md`). Se conserva como registro.
+
 Copiar desde la línea de abajo y pegarlo en Claude Code, abierto en la carpeta `micro3`.
 
 ---

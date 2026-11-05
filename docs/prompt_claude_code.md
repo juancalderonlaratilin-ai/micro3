@@ -1,5 +1,7 @@
 # Prompt base para Claude Code (tarea T-03)
 
+> **Histórico (2026-11-05):** T-03 ya se hizo el 2026-10-19. Se conserva como registro.
+
 Se pega al abrir `claude` en `C:\Users\Tatan\Documents\micro3`.
 
 ```

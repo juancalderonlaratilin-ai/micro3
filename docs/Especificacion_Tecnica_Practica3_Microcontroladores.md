@@ -3,6 +3,8 @@
 > **Propósito del documento**: Servir como especificación técnica completa y *prompt de contexto de sistema* para modelos de inteligencia artificial y desarrolladores de firmware. Contiene todos los requerimientos funcionales, arquitectónicos, fórmulas matemáticas y restricciones de diseño extraídos de las notas de laboratorio, tablero y sesiones de clase.
 
 > **Cambio de enfoque del profesor (2026-11-04), anotado por el equipo:** en Micro 3 el **auto-cero** (§3.1: PWM + filtro como trimmers de I0/Q0, botón y lazo de calibración, estado CALIBRATE de §4) **pasa a Macro**. En Micro 3, con las señales muestreadas por el ADC se controla **un PWM por canal** y con un **filtro pasa bajos** se vuelve a ver la señal analógica. El resto de este enunciado (ADC, Timers, UART no bloqueante, PC) sigue igual. Diseño actual: `MASTER_PLAN.md` y `docs/especificacion_pwm.md`.
+>
+> **Qué cumple esta entrega frente al enunciado (2026-11-05):** Timer0 dispara el ADC a 1 kHz (§3.2); Timer2 es la base de PWM6/PWM7, que reproducen I y Q (§3.3); UART no bloqueante con buffer circular, `tx_DAT` y `tx_string` (§3.4 B y C), a 115200 con líneas `2048,2051\r\n` (sin nombres, 500 por segundo; §3.4 D). **Todavía no hay filtro anti-aliasing** (§3.2), ni máquina de estados con CALIBRATE/ERROR (§4), ni comandos desde el PC. Se usa MCC como base (la persona; §2 dice lo contrario, por confirmar con el profesor).
 
 ---
 

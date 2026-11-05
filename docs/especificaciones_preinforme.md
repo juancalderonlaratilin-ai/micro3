@@ -1,6 +1,6 @@
 # Especificaciones para el preinforme (Micro 3: UART + ADC de I y Q)
 
-Proyecto Micro 3 · Fecha: 2026-10-30, actualizado el 2026-11-04 (envío en texto ASCII) · Versión: borrador v2 · Estado del firmware: ADC y envío ASCII (T-09) **implementados**; la persona confirmó que el modo ASCII funciona (2026-11-04), sin medir todavía; el eco de la UART a 115200 está probado.
+Proyecto Micro 3 · Fecha: 2026-10-30, actualizado el 2026-11-05 (coherencia con el código: PWM, sin anti-aliasing) · Versión: borrador v3 · Estado del firmware: ADC y envío ASCII (T-09) y PWM de reconstrucción (T-06) **implementados y compilados con XC8 2.40**; la persona confirmó que el modo ASCII funciona (2026-11-04), sin medir todavía; el eco de la UART a 115200 está probado. **Sin filtro anti-aliasing** en esta entrega.
 
 > **Para qué sirve:** es el documento que se lee **antes de escribir cualquier preinforme** de esta práctica. Reúne en un solo lugar lo que la clase pidió, los valores de diseño del PIC (UART y ADC), el detalle de cada bloque, los diagramas de tiempo, cómo se arma cada línea de texto, cómo se mide y qué cumple o no cumple. No reemplaza a los otros documentos: los resume y dice dónde está el detalle (§14).
 >
@@ -58,13 +58,13 @@ Requisitos técnicos ya vigentes del ADC (detalle en `docs/especificacion_adc.md
 
 | Pregunta | Respuesta | Etiqueta | Detalle |
 |---|---|---|---|
-| ¿Qué hace el PIC? | Muestrea I (RC0) y Q (RC1) cada 1 ms con el ADC (sin promedio) y, cada 2 pares, manda una línea de texto `xxxx,xxxx\r\n` por la UART: 500 líneas/s. Empieza al encender; no recibe comandos | [VERIFICADO en el código] | §5 B5 a B9 |
+| ¿Qué hace el PIC? | Muestrea I (RC0) y Q (RC1) cada 1 ms con el ADC (sin promedio), copia cada par a PWM6 (RA2) y PWM7 (RA4) y, cada 2 pares, manda una línea de texto `xxxx,xxxx\r\n` por la UART: 500 líneas/s. Empieza al encender; no recibe comandos | [VERIFICADO en el código] | §5 B5 a B9 |
 | ¿Qué hace el PC? | Abre el puerto a 115200 8N1, lee línea por línea (hasta `\n`), separa I y Q con `%d,%d`, descarta las líneas con otra forma, convierte los códigos a voltios y dibuja (plano I–Q, histograma, espectro) | [VERIFICADO] (`herramientas/interfaz_micro3.py`); el VI de LabVIEW, guía en `docs/guia_labview_paso_a_paso.md` | §5 B10, §8 |
 | Formato lógico | Texto **ASCII**: `2048,2051\r\n`, números en decimal de 0 a 4095, hasta 11 bytes por línea | [VERIFICADO] | §7, `especificacion_protocolo.md` |
 | Formato físico | UART asíncrona **8N1** (8 datos, sin paridad, 1 parada), primero el bit menos significativo, TTL. PIC a 3,7 V; el TX baja a ≈ 2,54 V por un divisor de 1 kΩ + 2,2 kΩ para el módulo USB-serie de 3,3 V (CP2102); el RX del PIC es de nivel TTL. Tierra común | [VERIFICADO] / [CÁLCULO] (2,54 V) | §5 B8 |
 | Baud rate | **115200** pedido; el chip genera **114 286** (`SP1BRG` = 34), error **−0,79 %** | [CÁLCULO] | §5 B8 |
 | Velocidad de transmisión | Capacidad de la línea: 11 429 B/s (a 114 286 baud). Uso: **5500 B/s** (500 líneas/s de 11 B) = **48,1 %**; queda el 51,9 % libre | [CÁLCULO] | §3 |
-| ¿Cuántos bytes se transmiten? | Hasta 15 por línea; 8 son las cifras de I y Q y 3 son de formato (la coma y `\r\n`). En el histograma de 10 000 muestras: ≈ 110 000 B (20 s) | [CÁLCULO] | §7 |
+| ¿Cuántos bytes se transmiten? | Hasta 11 por línea; 8 son las cifras de I y Q y 3 son de formato (la coma y `\r\n`). En el histograma de 10 000 muestras: ≈ 110 000 B (20 s) | [CÁLCULO] | §7 |
 | ¿Qué formato de transmisión? | ASCII, una línea por par, 500 líneas/s (`ADC_PARES_POR_LINEA` = 2). El ADC muestrea a 1 kHz; al PC llega 1 de cada 2 pares | [VERIFICADO] | §7 |
 | SINAD con 12 bits | Ideal **72 dB** (regla de 6,02 dB por bit = 72,2 dB); la fórmula completa con una senoidal a escala completa da **74,0 dB**. El **requisito** del proyecto es **> 60 dB** | [CÁLCULO] | §8.3 |
 
@@ -82,7 +82,8 @@ Requisitos técnicos ya vigentes del ADC (detalle en `docs/especificacion_adc.md
 | Ciclo de instrucción `TCY` | 250 ns | [CÁLCULO] | Fosc/4 |
 | Timer0 | 8 bits, reloj Fosc/4, prescaler 1:16, `TMR0H` = 249 → 250 cuentas × 4 µs = **1000 µs** | [CÁLCULO] | `tmr0.c`; DS p.261, p.267 |
 | Disparo del ADC | `ADACT = 0x02` = `TMR0_overflow` (Tabla 32-6, DS p.538); en modo de 8 bits es la **coincidencia** `TMR0L = TMR0H` | [VERIFICADO] | `especificacion_adc.md` §2.1 |
-| `fs` | 1 kHz; salida de datos también a 1 kHz (sin promedio desde el 2026-11-03) | [VERIFICADO] | `adc_iq.c` |
+| `fs` | **1 kHz por canal** (cada disparo convierte I y Q: 1000 pares/s, sin promedio). El PWM se actualiza con cada par (1000/s); al PC llega 1 de cada 2 (**500 líneas/s**, fs = 500 Hz en el PC) | [VERIFICADO] | `adc_iq.c`, `main.c`, `adc_ascii.h` |
+| Filtro anti-aliasing | **ninguno** en esta entrega (Nyquist: 500 Hz en el ADC, 250 Hz en el PC) | indicación de la persona (2026-11-05) | – |
 | Sobremuestreo respecto de 20 Hz | `fs/(2·20 Hz)` = 25 | [CÁLCULO] | |
 
 ### 3.2 ADC
@@ -125,7 +126,7 @@ Requisitos técnicos ya vigentes del ADC (detalle en `docs/especificacion_adc.md
 | Capacidad | 11 429 B/s (≈ 1040 líneas de 11 B por segundo como máximo) | [CÁLCULO] | |
 | Ocupación | 500 líneas/s: 5500 B/s, **48,1 %** | [CÁLCULO] | |
 | Buffers | RX 32 B (hoy sin usar); TX 64 B (5 líneas) | [VERIFICADO] | `especificacion_diseno_uart.md` §7 |
-| Memoria usada | sin medir con el firmware actual (anotar del *Dashboard* de MPLAB X) | — | `docs/estado.md` |
+| Memoria usada | XC8 2.40 (-O2, 2026-11-04): programa 1002 de 16 384 palabras (6,1 %), datos 204 de 2048 bytes (10 %) | [VERIFICADO] | `docs/estado.md` |
 | **Jitter pedido** | **σ del periodo < 10 ns** | requisito de la persona | §8.2 |
 | **SINAD ideal 12 bits** | 72 dB (6,02·N) / 74,0 dB (6,02·N + 1,76) | [CÁLCULO] | |
 | **SINAD requisito** | **> 60 dB** | requisito de la persona | |
@@ -222,7 +223,7 @@ TCOFF = 0,05 µs/°C · (T − 25 °C)        TAMP = 2 µs
 
 - **Hace:** convierte un canal por vez. Un multiplexor analógico elige RC0 (I) o RC1 (Q) con `ADPCH`; el capacitor de muestreo se carga durante la adquisición y se desconecta de la entrada (típ. 100 ns) al empezar la conversión (DS Fig. 32-2, p.501), de modo que el **instante de muestreo es el final de la adquisición**.
 - **Valores:** de §3.2. Resultado justificado a la derecha en `ADRESH:ADRESL` (12 bits). Modo básico, sin promedio por hardware.
-- **Secuencia por tick:** Timer0 → I (hardware); la ISR guarda I, pone `ADPCH` = Q y `ADGO` = 1 → Q (software); la ISR guarda Q, vuelve `ADPCH` a I y suma el par.
+- **Secuencia por tick:** Timer0 → I (hardware); la ISR guarda I, pone `ADPCH` = Q y `ADGO` = 1 → Q (software); la ISR guarda Q, vuelve `ADPCH` a I y deja el par listo (sin sumar).
 - **Sesgo entre I y Q** (Q se muestrea `T_canal` después de I) [CÁLCULO]: error a 20 Hz de 0,48 % (0,28°) en el caso A, 0,86 % (0,49°) en el de 40 µs y 4,4 % (2,5°) en el B.
 - **Estado:** implementado, sin probar.
 - **Detalle:** `docs/especificacion_adc.md` §2, §3, §10.
@@ -237,17 +238,17 @@ TCOFF = 0,05 µs/°C · (T − 25 °C)        TAMP = 2 µs
 
 ### B7. PWM por canal y filtro de reconstrucción (cambio de enfoque, 2026-11-04)
 
-- **Hace:** cada par del ADC fija el duty de un PWM por canal (I → PWM6, Q → PWM7). Un filtro pasa bajos quita la portadora y devuelve la señal analógica que entró por RC0/RC1. `V = VDD · duty`, con la misma `VDD` que el ADC: ganancia 1 sin calibrar.
+- **Hace:** cada par del ADC fija el duty de un PWM por canal (I → PWM6, Q → PWM7). Un filtro pasa bajos quita la frecuencia del PWM (15,625 kHz) y devuelve la señal analógica que entró por RC0/RC1. Es el filtro de reconstrucción; antes del ADC no hay filtro anti-aliasing. `V = VDD · duty`, con la misma `VDD` que el ADC: ganancia 1 sin calibrar.
 - **Valores** [VERIFICADO / CÁLCULO, `docs/especificacion_pwm.md`]: PWM6 en RA2 (I) y PWM7 en RA4 (Q); Timer2 con `T2PR` = 255 a Fosc/4 → 64 µs = **15,625 kHz**; 10 bits = 1024 pasos de 3,61 mV; `duty = (código + 2) >> 2` (12 → 10 bits, máximo 1023); duty inicial 512; se actualiza 1000 veces por segundo (un par cada 1 ms).
 - **Filtro** [PROPUESTA, `docs/especificacion_pwm.md` §6]: Sallen-Key de ganancia 1 con R1 = R2 = 22 kΩ, 100 nF y 47 nF (f0 ≈ 105 Hz, Q ≈ 0,73): −0,01 dB a 20 Hz, −39 dB a 1 kHz, −87 dB a 15,6 kHz, rizado ≈ 0,2 mV pp. Alternativa pasiva: 2 × (10 kΩ + 100 nF), −0,46 dB a 20 Hz y rizado ≈ 0,5 mV pp.
 - **Calidad esperada** [SIMULACIÓN]: SINAD de la salida reconstruida ≈ 54 dB a 20 Hz y ≈ 64 dB a 5 Hz (límite: el 2.º armónico del PWM de flanco final). **No es** el requisito de > 60 dB, que es del ADC (prueba 4.15).
-- **Estado:** código implementado (T-06, `pwm.c/.h`), sin compilar en MPLAB X ni probar; filtro sin montar.
+- **Estado:** código implementado (T-06, `pwm.c/.h`) y compilado con XC8 2.40; sin probar en el chip; filtro sin montar.
 - **Macro:** el auto-cero con PWM (sustituir los trimmers `I0`/`Q0`, residuo ±20 códigos con 10 bits, filtro de 30 Hz) queda documentado en `docs/macro_autocero_pwm.md`.
 
 ### B8. UART y capa física
 
 - **Hace:** saca los bytes del PIC al PC sin bloquear el programa.
-- **Valores:** EUSART1; TX = RC4 (pin 6, por PPS `0x0F`), RX = RC5 (pin 5, TTL con `INLVLC5` = 0); FIFO de RX de 32 B y de TX de 64 B; una ISR con dos bloques (RX y TX; hoy el RX no se lee); `tx_DAT(data, size)` (todo o nada) y `tx_string(s)` devuelven `true` o `false` sin esperar.
+- **Valores:** EUSART1; TX = RC4 (pin 6, por PPS `0x0F`), RX = RC5 (pin 5; TTL con `INLVLC5` = 0 era lo decidido, pero **el código actual lo deja en Schmitt** (`INLVLC = 0x3F` en `pin_manager.c`; VIH = 2,96 V)); FIFO de RX de 32 B y de TX de 64 B; una ISR con dos bloques (RX y TX; hoy el RX no se lee); `tx_DAT(data, size)` (todo o nada) y `tx_string(s)` devuelven `true` o `false` sin esperar.
 - **Niveles** [VERIFICADO + CÁLCULO]: el TX del PIC sale a ≈ 3,7 V; el divisor 1 kΩ + 2,2 kΩ lo deja en 3,7 · 2,2/3,2 = **2,54 V**, sobre el mínimo de 1,9 V del CP2102 con VIO = 3,3 V. El RX tiene entrada TTL: exige `VIH` ≥ 1,73 V (con Schmitt serían 2,96 V). Nunca un conversor a 5 V.
 - **Estado:** eco probado el **2026-10-19** a 115200 8N1 con `prueba_uart.py` (1.5: 20/20; 1.6: 256/256; 1.7: 1000/1000 en 141 ms; saludo `Micro3 listo`; 5 corridas seguidas sin fallas) [VERIFICADO: `docs/resultados_pruebas_uart.md`]. Faltan la capa física con osciloscopio (1.1 a 1.4) y las pruebas 1.9 a 1.16.
 - **Detalle:** `docs/especificacion_diseno_uart.md` §2 a §7; `docs/circuito_uart.svg`.
@@ -425,8 +426,8 @@ El histograma con la entrada en corto **no incluye** el ruido de la referencia; 
 
 - **LabVIEW no sirve para esto:** las líneas llegan por USB-serie con latencias de milisegundos. Sirve para el histograma de códigos (§8.1), no para el del periodo.
 - **Osciloscopio o contador de tiempos** con estadística del periodo, 10 000 mediciones, resolución ≲ 1 ns (diez veces mejor que el criterio).
-- **El pin RC2 actual no mide el reloj:** lo levanta la ISR, así que incluye el fin de la conversión y la latencia de interrupción. Podría mostrar hasta ≈ 72 ns de σ (latencia de 3 a 4 `TCY`) aunque el hardware fuera perfecto.
-- Para medir el disparo real hay que sacar `TMR0_out` a un pin por PPS (el datasheet dice que se puede, p.262). Con postscaler 1:1 conmuta en cada coincidencia: se mide el tiempo entre flancos consecutivos (1000 µs cada uno). Necesita un pin libre (RC2 es la única reserva) y un cambio de código: **[PROPUESTA], por aprobar**.
+- **RC2 con `ADC_PIN_PRUEBA` = 1 no mide el reloj:** lo levanta la ISR, así que incluye el fin de la conversión y la latencia de interrupción. Podría mostrar hasta ≈ 72 ns de σ (latencia de 3 a 4 `TCY`) aunque el hardware fuera perfecto.
+- **El disparo real ya sale por RC2:** con `ADC_PIN_PRUEBA` = 2 (lo que tiene el código) RC2 saca `TMR0_out` por PPS (`RC2PPS = 0x17`; DS p.262). Con postscaler 1:1 conmuta en cada coincidencia: se mide el tiempo entre flancos consecutivos (1000 µs cada uno). Falta confirmar el código PPS `0x17` en el datasheet (`notas` §5).
 - Si el requisito debe cumplirse también para Q, hay que cambiar el diseño [PROPUESTA, decisión del planificador y de la persona]: un solo disparo por hardware a 2 kHz que alterne canales (I en ticks pares y Q en impares; cada canal queda a 1 kHz pero con 500 µs de sesgo entre I y Q, 6 % de error a 20 Hz), o encadenar un segundo evento por hardware (CLC o similar, sin estudiar).
 
 ### 8.3 SINAD (RC-10)
@@ -445,10 +446,10 @@ Procedimiento: generador directo a RC0 y luego RC1 (≤ 10 kΩ, sin PCB2), senoi
 
 No está claro qué significa «modular». Dos lecturas razonables:
 
-1. **Entrada de 10 Hz:** inyectar una senoidal de 10 Hz (generador en RC0/RC1, o una portadora de ≈ 9,6 kHz modulada en amplitud a 10 Hz que PCB2 demodule), capturar ≥ 4096 pares y ver un pico en 10 Hz con la FFT. A 200 Hz de salida el ancho de bin es 200/4096 = 0,049 Hz y el límite de Nyquist 100 Hz.
+1. **Entrada de 10 Hz:** inyectar una senoidal de 10 Hz (generador en RC0/RC1, o una portadora de ≈ 9,6 kHz modulada en amplitud a 10 Hz que PCB2 demodule), capturar ≥ 4096 pares y ver un pico en 10 Hz con la FFT. A 500 líneas/s el ancho de bin es 500/4096 = 0,122 Hz y el límite de Nyquist 250 Hz.
 2. **Procesar en LabVIEW** los códigos del ADC (por ejemplo multiplicar por una referencia de 10 Hz) para ver ese componente.
 
-Hay que preguntar cuál es. El Serial Plotter solo dibuja bien señales de menos de 10 Hz (20 líneas/s).
+Hay que preguntar cuál es. En el Serial Plotter, a 500 líneas/s, un tono de 10 Hz se ve pero corre rápido; con `ADC_PARES_POR_LINEA` = 50 (20 líneas/s) solo se ven bien señales de menos de 10 Hz.
 
 ### 8.5 PWM de reconstrucción (el auto-cero pasa a Macro)
 
@@ -472,11 +473,11 @@ Estados: **Cumple (calculado)**: el cálculo lo cumple, falta medir. **Cumple (m
 | 8 | Jitter σ < 10 ns, canal Q | Arranque por software: la latencia de interrupción varía 250 ns (σ ≈ 72 ns si es uniforme) | **No garantizado** | §8.2, 4.17 |
 | 9 | SINAD > 60 dB (ideal 72/74 dB) | 12 bits ideales: 74 dB; quedan 14 dB para ruido, jitter, referencia y distorsión | Por medir | 4.15 |
 | 10 | Referencia con poco ruido | `VDD` ratiométrica con `Vref2`; falta medir el ruido de `VDD` (criterio ≤ 26 µV rms) | Por medir | 4.3, §8.1 |
-| 11 | Anti-aliasing: `fc ≤ fs/2` | Filtro de 19,4 Hz frente a 500 Hz; −56 dB a 500 Hz | Cumple (calculado) | – |
+| 11 | Anti-aliasing: `fc ≤ fs/2` | **No hay filtro anti-aliasing en esta entrega** (indicación de la persona). El filtro de 19,4 Hz de PCB2 es de la demodulación (Práctica 2); con el generador directo al pin no hay ningún filtro | **Pendiente** | 4.7 |
 | 12 | Enlace sin pérdidas | Eco a 115200: 20/20, 256/256, 1000/1000 | Cumple (medido, 2026-10-19) | 1.5 a 1.7 |
 | 13 | Capacidad de la línea | 48,1 % a 500 líneas/s de 11 B; 51,9 % libre | Cumple, también el < 50 % de la prueba 6.6 (calculado) | 2.2, 4.14 |
 | 14 | Error de baud | −0,79 %; peor caso combinado con el oscilador ≈ −2,8 % (al límite) | Cumple (medido en el eco) | 1.7, P2 |
-| 15 | Niveles lógicos | TX a 2,54 V (≥ 1,9 V); RX TTL con `VIH` 1,73 V frente a 3,3 V | Cumple (calculado) | 1.1 a 1.4 |
+| 15 | Niveles lógicos | TX a 2,54 V (≥ 1,9 V). RX: el código lo deja en **Schmitt** (`INLVLC = 0x3F`, `VIH` 2,96 V): con un CP2102 directo a 3,3 V el margen es de solo 0,34 V; con TTL serían 1,73 V | Revisar (TTL decidido, sin aplicar) | 1.1 a 1.4 |
 | 16 | PWM que reproduce las muestras | 10 bits, paso 3,61 mV, ganancia 1 (misma `VDD` que el ADC) | Cumple (calculado); **sin probar** | 3.2 a 3.4 |
 | 17 | Filtro de reconstrucción | Sallen-Key ≈ 105 Hz: −0,01 dB a 20 Hz, rizado ≈ 0,2 mV pp; SINAD simulado ≈ 54 dB a 20 Hz | Cumple (calculado); **sin hardware** | 3.5, 3.6 |
 | 18 | Chip y alimentación | PIC16F18426 (no LF) con 2,3 a 5,5 V; PCB2 a 3,7 V | Por confirmar el marcado del chip | 0.1, 0.3 |
@@ -489,7 +490,8 @@ Estados: **Cumple (calculado)**: el cálculo lo cumple, falta medir. **Cumple (m
 
 ### 10.1 Hito de la próxima clase (RC-5) [fecha por confirmar]
 
-- [ ] Compilar en MPLAB X el proyecto `firmware/Micro_Firmware.X` (ya trae `nbproject/` con `adc_iq.c`, `adc_ascii.c`, `adcc.c` y `tmr0.c`).
+- [ ] Compilar en MPLAB X el proyecto `firmware/Micro_Firmware.X` (ya trae `nbproject/` con `adc_iq.c`, `adc_ascii.c`, `pwm.c`, `adcc.c` y `tmr0.c`; con XC8 2.40 ya compiló sin errores).
+- [ ] Ver en el osciloscopio el PWM de RA2 y RA4 (15,625 kHz) y la salida del filtro de reconstrucción (pruebas 3.1 a 3.8).
 - [ ] Conectar **una fuente física** a RC0 y RC1: generador (≤ 10 kΩ de impedancia) o salidas de PCB2.
 - [ ] Ver las líneas en el Serial Plotter (prueba 4.18) y medir con `herramientas/interfaz_micro3.py` (pruebas 2.1 a 2.6, 4.3 y 4.15).
 - [ ] Medir 4.5 (periodo), 4.16 (`ADACQ`) y 4.13 (duración de la ISR) con RC2.
@@ -526,6 +528,7 @@ Estados: **Cumple (calculado)**: el cálculo lo cumple, falta medir. **Cumple (m
 8. **Auto-cero:** pasa a Macro (cambio de enfoque del profesor, 2026-11-04). En Micro 3 el PWM reconstruye I y Q; su SINAD simulado (≈ 54 dB a 20 Hz) no se debe confundir con el requisito de > 60 dB del ADC.
 9. **`ADC_PARES_POR_LINEA`:** con 50 (20 líneas/s) se ve mejor una señal lenta en el Serial Plotter, pero una medición hecha así no sirve para SINAD ni histograma. Para medir, 2.
 10. **Datos de la Práctica 2 en escalas distintas:** las coordenadas de LabVIEW (60 y 110 mV) no son tensiones de las salidas físicas de PCB2; no compararlas con el rango del ADC sin calibrar (lo dice el mismo preinforme P2).
+11. **Sin filtro anti-aliasing:** el enunciado (§3.2) pide `fc ≤ fs/2`; en esta entrega no hay filtro. Lo que llegue al pin por encima de 500 Hz se pliega en el ADC y por encima de 250 Hz en los datos del PC. Decirlo así en el preinforme (requisito 11 de §9, pendiente).
 
 ---
 
@@ -582,4 +585,4 @@ Se copia la del preinforme de la Práctica 2 (portada, resumen y palabras clave,
 | Cambios de opa | `CAMBIOS_OPAMPS_Y_AMPLITUDES_2026-10-16.md` (proyecto de Claude, fuera de `docs/`) |
 | Circuito de la UART | `docs/circuito_uart.svg` |
 
-**Qué no verifiqué al escribir este documento:** el valor de `RSS` a 3,7 V; la duración de las ISR; el jitter del HFINTOSC; la latencia del USB-serie; el tiempo de la conversión a decimal en el PIC; el contenido de `CAMBIOS_OPAMPS_Y_AMPLITUDES_2026-10-16.md` (los `GBW` salen de mis notas anteriores); y que el código del zip compile en MPLAB X.
+**Qué no verifiqué al escribir este documento:** el valor de `RSS` a 3,7 V; la duración de las ISR; el jitter del HFINTOSC; la latencia del USB-serie; el tiempo de la conversión a decimal en el PIC; el contenido de `CAMBIOS_OPAMPS_Y_AMPLITUDES_2026-10-16.md` (los `GBW` salen de mis notas anteriores); y el *Clean and Build* en MPLAB X (con XC8 2.40 desde la línea de comandos ya compiló, 2026-11-04).

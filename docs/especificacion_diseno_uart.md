@@ -1,6 +1,6 @@
 # Especificación de diseño: enlace UART PC ↔ PIC (Fase 1)
 
-Proyecto Micro 3 · Firmware `firmware/Micro_Firmware.X` · Fecha: 2026-10-16 · Actualizado: 2026-10-30 (requisitos del ADC)
+Proyecto Micro 3 · Firmware `firmware/Micro_Firmware.X` · Fecha: 2026-10-16 · Actualizado: 2026-11-05 (pines, periféricos y prioridad de la ISR según el código)
 
 > **Estado:** borrador v2, revisado contra el datasheet, la errata y la guía de XC8. Los valores marcados **[PROPUESTA]** son decisiones de diseño que hay que confirmar. Los marcados **[VERIFICADO]** salen directamente de los documentos de `docs/`. El detalle y las páginas de cada dato están en **`notas_pic16f18426.md`**.
 
@@ -23,7 +23,7 @@ Proyecto Micro 3 · Firmware `firmware/Micro_Firmware.X` · Fecha: 2026-10-16 ·
 | Microcontrolador | PIC16F18426 (8 bits, encapsulado de 14 pines) | confirmado (configuración del proyecto) |
 | IDE / compilador | MPLAB X 6 + XC8 2.40 | confirmado |
 | Programador | SNAP | confirmado |
-| Estilo de código | C "bare-metal" sobre registros (SFR). **Sin MCC.** | regla de la práctica |
+| Estilo de código | C sobre registros (SFR), con el código de MCC como base, revisado línea a línea (`docs/revision_codigo_mcc.md`) | la persona (2026-10-19); el enunciado dice «sin MCC»: confirmar con el profesor |
 | Oscilador | **HFINTOSC interno a 16 MHz**, sin PLL ni cristal (exactitud nominal ±2 %) | [PROPUESTA] |
 | Rango de VDD del chip | PIC16F18426 (sin "L"): 2,3 – 5,5 V con Fosc ≤ 16 MHz. **Un PIC16LF18426 (máx. 3,6 V) no sirve con 3,7 V** | [VERIFICADO] |
 | Ciclo de instrucción | Fcy = Fosc/4 = 4 MHz → 250 ns | calculado |
@@ -32,7 +32,8 @@ Proyecto Micro 3 · Firmware `firmware/Micro_Firmware.X` · Fecha: 2026-10-16 ·
 | Alimentación (VCC / VDD) | **3,7 V** DC de la fuente Keysight E36233A (GND a +3,7 V). Se asume que el PIC comparte esta alimentación. Las referencias Vref/Vref2 ≈ 1,85 V son la tierra virtual de las señales analógicas | confirmado (preinforme §1.2) |
 | Nivel lógico del conversor USB-serie | 3,3 V (CP2102, FT232R o similar) | ver nota 2.3 |
 | Visualización (gráfica de impedancia I vs Q) | **En el PC**, por UART, con LabVIEW o Python. El PIC no maneja pantalla | decidido (2026-10-16) |
-| ADC (Fase 2) | 12 bits (ADCC), `VREF = VDD = 3,7 V`, canales I = RC0 y Q = RC1 en un ADC multiplexado, **`fs` = 1 kHz** disparado por Timer0, I y Q convertidos en **menos de 1 ms**, sin promedio (1000 pares/s, desde el 2026-11-03). Detalle: `docs/especificacion_adc.md` | profesor y código de T-09; sin probar |
+| ADC (Fase 2) | 12 bits (ADCC), `VREF = VDD = 3,7 V`, canales I = RC0 y Q = RC1 en un ADC multiplexado, **`fs` = 1 kHz** disparado por Timer0, I y Q convertidos en **menos de 1 ms**, sin promedio (1000 pares/s = 1 kHz por canal, desde el 2026-11-03). **Sin filtro anti-aliasing** en esta entrega. Detalle: `docs/especificacion_adc.md` | profesor y código de T-09; sin probar |
+| PWM (Fase 2) | Timer2 a Fosc/4, `T2PR` = 255: 15,625 kHz, 10 bits. PWM6 en RA2 (I), PWM7 en RA4 (Q); duty = (código + 2) >> 2 con cada par (1000 veces/s). Detalle: `docs/especificacion_pwm.md` | cambio de enfoque del profesor (2026-11-04); código de T-06, sin probar |
 | **SINAD del ADC** | **> 60 dB** (ENOB > 9,67 bits), medido con una senoidal de 5 Hz y de 20 Hz casi a escala completa. Un 12 bits ideal da 74 dB, así que quedan 14 dB para ruido, jitter, referencia y distorsión (`docs/especificacion_adc.md` §6) | requisito de la persona (2026-10-30); condiciones de medición [PROPUESTA] |
 | Ruido de cuantización ideal del ADC | 261 µV rms con `VREF` = 3,7 V (el profesor cita 352 µV, que corresponde a 12 bits y 5 V) | por confirmar con el profesor |
 
@@ -75,14 +76,14 @@ Evitar los pines de programación (RA0 = ICSPDAT, RA1 = ICSPCLK, RA3 = MCLR) par
 | Pin físico | Puerto | Función | Fase | Notas |
 |---|---|---|---|---|
 | 6 | **RC4** | **TX (EUSART1)** | **1** | salida vía PPS: `RC4PPS = 0x0F`. Bajar `ANSELC4` (reset = analógico) |
-| 5 | **RC5** | **RX (EUSART1)** | **1** | entrada: `RX1DTPPS = 0x15` (en el datasheet se llama `RX1PPS`) (ya es el valor por defecto). Bajar `ANSELC5`. Nivel TTL (`INLVLC5 = 0`) |
-| 2 | **RA5** | LED de estado (heartbeat / error) | **1** | salida digital (bajar `ANSELA5`). Opcional, muy útil para depurar |
+| 5 | **RC5** | **RX (EUSART1)** | **1** | entrada: `RX1DTPPS = 0x15` (en el datasheet se llama `RX1PPS`) (ya es el valor por defecto). Bajar `ANSELC5`. Nivel TTL (`INLVLC5 = 0`) propuesto; **el código actual lo deja en Schmitt** (`INLVLC = 0x3F` en `pin_manager.c`; VIH = 2,96 V) |
+| 2 | RA5 | libre | – | el LED de estado (T-05) se retiró el 2026-10-21 |
 | 10 | RC0 | Entrada analógica canal I (ANC0) | 2 | **en uso** (T-09, sin probar) |
 | 9 | RC1 | Entrada analógica canal Q (ANC1) | 2 | **en uso** (T-09, sin probar) |
 | 11 | RA2 | PWM de I (reconstrucción de la señal muestreada) | 2 | PWM6 vía PPS (`RA2PPS = 0x0D`), código en `pwm.c` (T-06) |
 | 3 | RA4 | PWM de Q (reconstrucción de la señal muestreada) | 2 | PWM7 vía PPS (`RA4PPS = 0x0E`), código en `pwm.c` (T-06) |
-| 7 | RC3 | Pulsador de auto-cero (IOC, pull-up débil) | — | **pasa a Macro** (2026-11-04); en Micro 3 queda libre |
-| 8 | RC2 | libre (reserva: pin de prueba para medir la ISR con el osciloscopio) | – | con `ADC_PIN_PRUEBA = 1` (`adc_iq.h`) sube mientras corre `adc_iq_isr()` |
+| 7 | RC3 | libre (el pulsador de auto-cero pasa a Macro, 2026-11-04) | — | – |
+| 8 | RC2 | pin de prueba: **salida del Timer0** (`TMR0_out`, `RC2PPS = 0x17`), cuadrada de 500 Hz, cada flanco es un disparo del ADC | 2 | `ADC_PIN_PRUEBA = 2` (`adc_iq.h`, lo que tiene el código). Con `1` sube mientras corre `adc_iq_isr()`. En la placa nueva RC2 es `EN_AZ_PIC`: JP_AZEN en 1–2 |
 | 13 / 12 / 4 | RA0 / RA1 / RA3 | ICSPDAT / ICSPCLK / MCLR | – | programación, no usar. RA3 solo es entrada |
 | 1 / 14 | VDD / VSS | alimentación | – | con capacitor de desacople de 100 nF cerca |
 
@@ -93,20 +94,21 @@ Evitar los pines de programación (RA0 = ICSPDAT, RA1 = ICSPCLK, RA3 = MCLR) par
 | Función | Pines | Fase |
 |---|---|---|
 | UART TX y RX | 2 | 1 |
-| LED de estado | 1 | 1 |
+| LED de estado (retirado el 2026-10-21) | 0 | — |
 | Canales I y Q (ADC) | 2 | 2 |
 | PWM de I y Q (PWM6 y PWM7 + filtro pasa bajos de reconstrucción) | 2 | 2 |
+| Pin de prueba RC2 (salida del Timer0) | 1 | 2 |
 | Pulsador de auto-cero (pasa a Macro) | 0 | — |
-| **Usados** | **8** | |
+| **Usados** | **7** | |
 | Libres para E/S (12 − RA0, RA1, RA3) | 9 | |
-| **Reserva** | **1** (RC2) | |
+| **Reserva** | **2** (RA5 y RC3) | |
 
 Razones y consecuencias:
 
 - **Los PWM reproducen las señales muestreadas** (cambio de enfoque del profesor, 2026-11-04): cada par del ADC fija el duty de PWM6 (I) y PWM7 (Q), y un filtro pasa bajos de ≈ 100 Hz devuelve la señal analógica (`docs/especificacion_pwm.md`). La sustitución de los trimmers I0/Q0 por PWM (auto-cero) pasa a Macro.
 - **La gráfica de impedancia no usa pines del PIC.** Los valores de I y Q viajan por la UART y el PC dibuja I (eje X) contra Q (eje Y). Cada par viaja como texto, `xxxx,xxxx\r\n` (hasta 11 bytes, §8). A 500 líneas/s son 5500 B/s, el 48,1 % de la capacidad de la línea.
-- **Una pantalla local no cabe** en este chip salvo un OLED I2C quitando el LED (0 de reserva). Una pantalla SPI necesitaría 4–5 pines. Si el profe la pide, el reemplazo sin cambios de código es el **PIC16F18446** (20 pines, 18 E/S, 17 canales de ADC; mismo datasheet [VERIFICADO: DS p.14]).
-- **Sin cristal externo:** usaría RA4 (OSC2) y RA5 (OSC1), que aquí son el PWM de Q y el LED.
+- **Una pantalla local casi no cabe** en este chip: un OLED I2C ocuparía los 2 pines libres (RA5 y RC3). Una pantalla SPI necesitaría 4–5 pines. Si el profe la pide, el reemplazo sin cambios de código es el **PIC16F18446** (20 pines, 18 E/S, 17 canales de ADC; mismo datasheet [VERIFICADO: DS p.14]).
+- **Sin cristal externo:** usaría RA4 (OSC2) y RA5 (OSC1); RA4 es el PWM de Q.
 - **Debe respetarse RA0/RA1/RA3** para que el SNAP pueda programar y depurar.
 
 ---
@@ -115,14 +117,14 @@ Razones y consecuencias:
 
 | Periférico | Uso | Configuración clave |
 |---|---|---|
-| Oscilador HFINTOSC | reloj del sistema | `RSTOSC` = HFINTOSC 1 MHz; en código: `OSCFRQ = 0b101` (16 MHz), `OSCCON1 = 0x60` (NOSC = 110, NDIV = 1:1), esperar `OSCCON3[ORDY]` |
+| Oscilador HFINTOSC | reloj del sistema | `RSTOSC` = HFINTOSC 1 MHz; `OSCILLATOR_Initialize()` (`mcc.c`): `OSCFRQ = 0x05` (16 MHz), `OSCCON1 = 0x60` (NOSC = 110, NDIV = 1:1); no espera `OSCCON3[ORDY]` |
 | PPS | enrutar TX y RX a RC4 / RC5 | `RC4PPS = 0x0F` (TX1), `RX1DTPPS = 0x15` (en el datasheet se llama `RX1PPS`) (RC5). `PPSLOCKED = 0` tras el reset: no hace falta desbloquear |
-| Entradas/salidas | pines digitales | `ANSELC4 = ANSELC5 = 0`; `TRISC4 = 0`, `TRISC5 = 1`; `INLVLC5 = 0` (TTL) |
+| Entradas/salidas | pines digitales | `ANSELC4 = ANSELC5 = 0`; `TRISC4 = 0`, `TRISC5 = 1`; `INLVLC5 = 0` (TTL) propuesto; **el código actual lo deja en Schmitt** (`INLVLC = 0x3F` en `pin_manager.c`; VIH = 2,96 V) |
 | EUSART1 | enlace con el PC | async, 8N1, `BRGH = 1`, `BRG16 = 1`, `SP1BRGH = 0`, `SP1BRGL = 34`, `SYNC = 0`, `SPEN`, `TXEN`, `CREN` |
 | Interrupciones | RX y TX por evento | `RC1IE` (recepción) siempre activa. `TX1IE` **solo mientras hay datos por enviar**. `PEIE` y `GIE` activos. Vector único en `0x0004` |
-| GPIO | LED de estado en RA5 | salida digital |
 | ADCC | I y Q a 12 bits | `ADREF = 0x00` (VDD y VSS), `ADCLK = 0x0F` (Fosc/32, `TAD` = 2 µs), `ADACQ = 160`, `ADACT = 0x02` (desbordamiento de Timer0), resultado justificado a la derecha, `ADIE = 1`. Ver `docs/especificacion_adc.md` §2 y §3 |
-| Timer0 | disparo del ADC cada 1 ms | 8 bits, Fosc/4, prescaler 1:16, `TMR0H = 249` (250 cuentas × 4 µs = 1000 µs) |
+| Timer0 | disparo del ADC cada 1 ms | 8 bits, Fosc/4, prescaler 1:16, `TMR0H = 249` (250 cuentas × 4 µs = 1000 µs); `TMR0_out` a RC2 por PPS (`RC2PPS = 0x17`) |
+| Timer2 + PWM6/PWM7 | reconstrucción de I y Q | `T2CLKCON = 0x01` (Fosc/4), `T2PR = 255`, `T2CON = 0x80` (1:1); `RA2PPS = 0x0D` (PWM6), `RA4PPS = 0x0E` (PWM7); `PWMxCON = 0x80`. Sin interrupciones (`docs/especificacion_pwm.md` §5.3) |
 | Bits de configuración | ver §11 | `LVP` habilitado, WDT desactivado en desarrollo, BOR activo |
 
 Periféricos de la Fase 2: el ADCC (2 canales, referencia VDD = 3,7 V; las salidas I y Q quedan centradas en ~1,85 V) y el Timer0 (disparo a 1 kHz) tienen código desde el 2026-10-30 (T-09, copiado a `firmware/`, sin probar). Timer 2 + **PWM6/PWM7** ya se usan para reconstruir I y Q (T-06, `pwm.c`); el IOC del pulsador pasa a Macro.
@@ -149,7 +151,7 @@ Arquitectura guiada por eventos: las interrupciones solo capturan el evento y mu
 
 | ID | Tarea | Dónde corre | Descripción |
 |---|---|---|---|
-| T1 | `system_init()` | arranque | Oscilador, pines/PPS, EUSART, interrupciones, LED |
+| T1 | `SYSTEM_Initialize()`, `adc_iq_init()`, `pwm_init()` | arranque | Oscilador, pines/PPS, EUSART, ADC y Timer0, Timer2 y PWM; al final `PEIE` y `GIE` |
 | T2 | bloque RX de la ISR | interrupción (E1, E3, E4) | Mover el byte de hardware a la FIFO de RX. Corto. Hoy nadie lee esos bytes (no hay comandos) |
 | T3 | bloque TX de la ISR | interrupción (E2) | Mover un byte de la FIFO de TX al hardware |
 | T4 | `uart_tx_DAT(const uint8_t *data, uint16_t size)` | llamada desde el programa principal | Encola un bloque de bytes. `true` si cupo todo, `false` si no (E5) |
@@ -164,7 +166,7 @@ Arquitectura guiada por eventos: las interrupciones solo capturan el evento y mu
 
 **Una sola ISR:** el chip tiene un único vector de interrupción (`0x0004`) y no tiene prioridades. T2 y T3 son dos bloques dentro de la misma función `void __interrupt() isr(void)`, que comprueba **bandera y habilitación** de cada fuente y limpia (o consume) la bandera antes de salir. No se rehabilita `GIE` dentro de la ISR [VERIFICADO: UG §5.8]. Con T-09 se suma un tercer bloque, el del ADC (`ADIF` y `ADIE`), que `interrupt_manager.c` atiende después de TX y RX.
 
-**Prioridad:** E1, E2 y (desde T-09) E8 son las únicas interrupciones. Si coinciden, la ISR atiende primero la recepción (perder un byte recibido es peor que retrasar uno enviado).
+**Prioridad:** E1, E2 y (desde T-09) E8 son las únicas interrupciones. `interrupt_manager.c` las revisa con `if / else if` en este orden: **TX, luego RX, luego ADC**, y atiende una por entrada (las demás quedan con su bandera arriba y entran enseguida). Como hoy el RX no se lee, el orden no arriesga datos; si se agregan comandos, conviene revisar que la RX no espere más de ≈ 174 µs.
 
 **Plazo de servicio de RX:** el receptor tiene una FIFO de solo 2 bytes y se produce overrun si llega completo un tercer byte sin haber leído `RC1REG`. Con 86,8 µs por byte, la ISR debe atenderse en menos de ~2 tiempos de byte (≈ 174 µs). En la Fase 2, ninguna otra ISR (ADC, timer) puede retener la CPU ese tiempo. La duración de `adc_iq_isr()` se mide con RC2 (prueba 4.13), y el jitter del instante de muestreo de Q depende de lo que tarden las ISR de la UART (`docs/especificacion_adc.md` §4).
 
@@ -230,12 +232,13 @@ Detalle, cuentas y motivos: `docs/especificacion_protocolo.md` y `docs/criterios
 2. Que el PIC se alimente de los mismos 3,7 V que PCB2, y el modelo exacto del conversor USB-serie con su nivel lógico.
 3. Que los pines propuestos (§3) coincidan con tu placa o protoboard.
 4. **Revisión de silicio del chip** (MPLAB X → *Window > Dashboard*). Si es A4, ninguna errata del EUSART aplica. Si es A1/A2, la regla de escribir `TX1REG` solo con `TX1IF = 1` ya cubre el workaround (ER 1.9.2).
-5. Formato de los comandos de texto, si se agregan (T-07, control del PWM).
+5. Formato de los comandos de texto: no hay en Micro 3 (T-07, control del PWM desde el PC, pasa a Macro).
 6. WDT: se deja desactivado en desarrollo. ¿Se activa en la versión final?
 7. Valores exactos de los bits de configuración: generarlos con MPLAB X (*Window > Target Memory Views > Configuration Bits*) o consultar `pic_chipinfo.html` de la carpeta `docs` de XC8.
 8. Qué terminal se usará para las pruebas (Realterm, Hercules, Tera Term) y si el PC ya tiene el driver del conversor.
 9. Valor `VBOR` (brown-out) con VDD = 3,7 V, que falta leer en las especificaciones eléctricas.
 10. Referencia del ADC = VDD: está en el código desde el 2026-10-30 (`ADREF = 0x00`). Falta confirmarla con el profesor y medir el ruido de la alimentación, porque la lectura depende de ella (`docs/especificacion_adc.md` §7). Los demás pendientes del ADC están en §13 de ese archivo.
+11. Capa física de la UART: este documento describe el divisor 1 kΩ + 2,2 kΩ (montaje en protoboard); la placa Micro3 usa traductores SN74LVC1T45 (U5 y U6, `docs/contexto_uart_tx_rx.md` §1). Confirmar cuál se usa en la entrega.
 
 ---
 

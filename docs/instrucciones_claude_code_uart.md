@@ -1,5 +1,7 @@
 # Instrucciones para Claude Code: adaptar el EUSART de MCC (tarea T-03)
 
+> **Histórico (2026-11-05):** T-03 ya se hizo (2026-10-19). El `main.c` de eco ya no está: hoy el PIC manda líneas `I,Q` y reparte cada par al PWM (`MASTER_PLAN.md`, «Qué tiene esta entrega»). **El §2 (formato de los comentarios) sigue vigente** para todo el código.
+
 Proyecto Micro 3 · 2026-10-19 · Aprobado por la persona en el chat del 2026-10-19 (cambios C-06 a C-10 de `docs/revision_codigo_mcc.md`).
 
 > **Qué se pide:** modificar a mano el código que MCC generó para la UART, de modo que **no bloquee**, use **buffers circulares con cabeza y cola (sin contadores)** y ofrezca `tx_DAT` y `tx_string`. El código tiene que quedar **muy comentado**, porque la persona lo va a leer línea por línea para aprenderlo y sustentarlo.

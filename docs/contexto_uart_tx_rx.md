@@ -14,7 +14,7 @@ Documento de contexto para quien trabaje con el enlace serie del proyecto, sea u
 | TX del PIC | **RC4** (pin 6), por PPS: `RC4PPS = 0x0F` (TX1) |
 | RX del PIC | **RC5** (pin 5), por PPS: `RX1DTPPS = 0x15` (valor de reset) |
 | Dirección de pines | `TRISC = 0x2F`: RC4 salida, RC5 entrada. RC5 es digital (`ANSELC` bit 5 = 0) |
-| Nivel de entrada RX | TTL (`INLVLC5 = 0`): VIH = 1,73 V |
+| Nivel de entrada RX | **Schmitt** en el código (`INLVLC = 0x3F` en `pin_manager.c`): VIH = 0,8·VDD = 2,96 V. El diseño pedía TTL (`INLVLC5 = 0`, VIH = 1,73 V) y no se aplicó; con U6 en la placa el PIC recibe ≈ 3,7 V y alcanza |
 | Adaptador al PC | módulo USB-serie **CP2102** a 3,3 V, por el conector **J5** (1 GND, 2 TX del módulo, 3 RX del módulo, 4 3V3, 5 GND). Confirmar que el orden coincide con el módulo |
 | Traducción de niveles (placa Micro3) | **U5 SN74LVC1T45**: PIC_TX (3,7 V) → RX del CP2102 (3,3 V). **U6 SN74LVC1T45**: TX del CP2102 → PIC_RX. El lado de 3,3 V se alimenta del 3V3 del propio módulo |
 | Jumpers | **JP_TX** debe estar cerrado para que lleguen los datos al PC (JP_RX hoy no hace falta: el PIC no recibe comandos) |

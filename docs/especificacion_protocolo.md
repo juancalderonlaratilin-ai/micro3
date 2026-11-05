@@ -36,14 +36,16 @@ Proyecto Micro 3 · Decidido por la persona el 2026-11-04 (anotado en `docs/crit
 
 **Por qué 1 línea cada 2 pares y no cada par:** una línea tarda 0,96 ms y llega un par nuevo cada 1 ms. Con `ADC_PARES_POR_LINEA` = 1 cabrían apenas (96 % de la línea): cualquier atraso o una línea de arranque llenaría el buffer de TX y se perderían líneas. Con 2 la línea va al 48 % y sobra la mitad. Si algún día hace falta fs = 1000 Hz, se puede probar con 1 revisando que `adcLineasPerdidas` quede en 0.
 
-**Por qué alcanza fs = 500 Hz:** el filtro anti-aliasing de la placa corta en ≈ 5 Hz y las pruebas de SINAD se hacen a 5 Hz y 20 Hz. Sus armónicos 2 a 5 llegan a 100 Hz, por debajo de 250 Hz (la mitad de 500). El ADC sigue muestreando a 1 kHz con el disparo del Timer0, así que el instante de cada muestra no tiene jitter de software.
+**Por qué alcanza fs = 500 Hz:** las pruebas de SINAD se hacen a 5 Hz y 20 Hz; sus armónicos 2 a 5 llegan a 100 Hz, por debajo de 250 Hz (la mitad de 500). El ADC sigue muestreando a 1 kHz con el disparo del Timer0 (I y Q en cada disparo) y el PWM usa todos los pares: solo la UART manda 1 de cada 2, sin promediar. El instante de cada muestra no tiene jitter de software.
+
+**Sin filtro anti-aliasing (esta entrega):** no hay filtro antes del ADC. Una componente que llegue al pin por encima de 500 Hz se pliega ya en el ADC; una entre 250 y 500 Hz se ve bien en el PWM pero se pliega en los datos del PC, porque al descartar 1 de cada 2 pares no hay filtro digital.
 
 ## 3. Por qué texto (decisión del 2026-11-04)
 
 | | Texto ASCII (lo escogido) |
 |---|---|
 | A favor | Se lee directo en cualquier terminal y en el Serial Plotter. En LabVIEW basta leer hasta `\n` y separar con *Scan From String* (`%d,%d`). Es lo que sugiere el enunciado (§3.4 D). El PC no tiene que mandar nada para que empiece el envío |
-| En contra | Ocupa más bytes por par que un formato binario, así que se manda 1 de cada 2 pares (fs = 500 Hz en vez de 1000). Sin nombres, el PC depende del orden: el primer número es I y el segundo Q. No hay suma de verificación: una línea dañada solo se detecta si no tiene la forma `número,número`. No hay número de secuencia: una línea perdida no se ve. El PC no puede mandar comandos (el PWM por serial, T-07, queda por replantear) |
+| En contra | Ocupa más bytes por par que un formato binario, así que se manda 1 de cada 2 pares (fs = 500 Hz en vez de 1000). Sin nombres, el PC depende del orden: el primer número es I y el segundo Q. No hay suma de verificación: una línea dañada solo se detecta si no tiene la forma `número,número`. No hay número de secuencia: una línea perdida no se ve. El PC no puede mandar comandos (el PWM por serial, T-07, pasa a Macro) |
 
 ## 4. En el PIC
 

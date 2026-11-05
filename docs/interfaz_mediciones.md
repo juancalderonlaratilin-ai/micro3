@@ -50,7 +50,7 @@ Si los datos se salen de 0–3,7 V, el eje vertical se ajusta solo para que siem
 
 ## 3. Prueba de SINAD (prueba 4.15)
 
-1. **Placa:** generador de funciones en **J7** (TEST_I, y luego TEST_Q), **JP_IN_I/Q en 2–3** (entrada de prueba) y **JP_ADC_I/Q en 2–3** (sin el filtro de 5 Hz). Así la señal llega directo al pin por \~1,1 kΩ.
+1. **Placa:** generador de funciones en **J7** (TEST_I, y luego TEST_Q), **JP_IN_I/Q en 2–3** (entrada de prueba) y **JP_ADC_I/Q en 2–3** (sin el filtro de 5 Hz de la placa: en esta entrega no se usa filtro anti-aliasing). Así la señal llega directo al pin por \~1,1 kΩ.
 2. **Generador:** senoidal de **1,7 V de amplitud centrada en 1,85 V** (de 0,15 V a 3,55 V, sin recorte), a **5 Hz** y luego a **20 Hz**.
 3. **En la interfaz:**
    1. Canal I, tipo «Senoidal», 4096 muestras (o 8192 o 10 000).

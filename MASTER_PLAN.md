@@ -5,11 +5,31 @@ Instrumento de inspección por corrientes de Foucault. El PIC adquiere las seña
 
 > **Cambio de enfoque del profesor (2026-11-04):** el auto-cero con PWM (I0/Q0 como niveles de continua, pulsador, lazo de calibración) **pasa a Macro**. Lo que ya estaba escrito quedó en `docs/macro_autocero_pwm.md`, `docs/criterios_filtro_pwm.md` y `docs/guia_filtro_pwm_dac.md`, marcados [MACRO]. En Micro 3 el PWM reconstruye las señales muestreadas: `docs/especificacion_pwm.md`.
 
+## Qué tiene esta entrega (tomado del código, revisado el 2026-11-05)
+
+Esta tabla es la referencia común de todos los `.md`. Si un documento dice otra cosa, manda el código y esta tabla.
+
+| Bloque | Qué hace | Dónde está en el código |
+|---|---|---|
+| Reloj | HFINTOSC a **16 MHz** (`OSCFRQ = 0x05`, `OSCCON1 = 0x60`), `TCY` = 250 ns | `mcc.c` |
+| **Timer0 → ADC** | 8 bits, Fosc/4, prescaler 1:16, `TMR0H` = 249: **1 ms**. Dispara por hardware la conversión de I (`ADACT = 0x02`). Su salida `TMR0_out` sale por RC2 (`RC2PPS = 0x17`, `ADC_PIN_PRUEBA` = 2): cuadrada de 500 Hz, cada flanco es un disparo | `tmr0.c`, `adcc.c`, `adc_iq.c/.h` |
+| **ADC** | 12 bits, `VREF = VDD` = 3,7 V, `TAD` = 2 µs, `ADACQ` = 160. En cada disparo convierte **I (RC0) y luego Q (RC1)**: I la arranca el Timer0 y Q la ISR. **1000 pares por segundo = 1 kHz por canal**, sin promedio | `adc_iq.c/.h`, `adcc.c` |
+| **Timer2 → PWM** | Timer2 a Fosc/4, `T2PR` = 255, 1:1: **64 µs = 15,625 kHz, 10 bits**. **PWM6 en RA2 = I**, **PWM7 en RA4 = Q**. Con **cada par muestreado** (1000 veces por segundo) `duty = (código + 2) >> 2` (máximo 1023); duty inicial 512. Sin interrupciones | `pwm.c/.h`, `main.c` |
+| **UART** | EUSART1, 115200 nominal (114 286 real, `SP1BRG` = 34), 8N1, TX = RC4, RX = RC5. Una línea `I,Q
+` (`2048,2051
+`, hasta 11 bytes) **cada 2 pares: 500 líneas/s** (fs = 500 Hz en el PC), 48,1 % de la línea. El PIC no lee el RX | `adc_ascii.c/.h`, `eusart1.c` |
+| Filtros | **No hay filtro anti-aliasing** en esta entrega (indicación de la persona, 2026-11-05). El filtro pasa bajos de **reconstrucción** del PWM (≈ 100 Hz) es una propuesta, sin montar (`docs/especificacion_pwm.md` §6) | – |
+| No está | auto-cero (Macro), comandos desde el PC, trama binaria, promedio, máquina de estados, LED | – |
+
+En resumen: el ADC muestrea a 1 kHz (I y Q en cada disparo), el PWM usa todos los pares y la UART manda 1 de cada 2 (500 por segundo).
+
 ## Estructura de la carpeta
 
 - `hardware/`: archivos de Altium (esquemático, PCB, BOM). Son binarios, no se editan desde aquí.
 - `firmware/Micro_Firmware.X/`: proyecto de MPLAB X (PIC16F18426, MPLAB X 6, XC8 2.40, programador SNAP).
 - `docs/`: especificaciones y documentación. **Empieza por `docs/especificacion_diseno_uart.md`** (qué se va a construir) y consulta **`docs/notas_pic16f18426.md`** (resumen verificado del chip, con páginas) antes de abrir los PDF grandes (datasheet de ~700 páginas, guía de XC8 de ~580).
+
+**Documento técnico completo** (todas las especificaciones y decisiones, fórmulas, flujo del código, cada función, cambios frente a MCC y preguntas de evaluación): `docs/documento_tecnico_micro3.md`.
 
 Criterios de diseño y valores escogidos (reloj, baud, formato, niveles, buffers, formato de envío ASCII): `docs/criterios_diseno.md`. Circuito UART con el módulo CP2102: `docs/circuito_uart.svg`. El TX del PIC va al adaptador **por un divisor 1 kΩ + 2,2 kΩ**, no directo.
 
@@ -53,7 +73,8 @@ Ese archivo es el enunciado de la práctica (qué pide el curso). Donde contradi
 - Chip fijo: PIC16F18426 (14 pines). Usados: RC4/RC5 (UART), RC0/RC1 (I y Q), RA2/RA4 (PWM de reconstrucción) y RC2 (salida del Timer0 para medir). La gráfica de impedancia I vs Q se dibuja **en el PC** (LabVIEW o Python); el PIC no maneja pantalla. Presupuesto de pines en `docs/especificacion_diseno_uart.md` §3.1.
 - Oscilador HFINTOSC a 16 MHz, UART 8N1 a 115200 baud (SP1BRG = 34).
 - **SINAD del ADC > 60 dB** (ENOB > 9,67 bits). Requisito de la persona, 2026-10-30. Un 12 bits ideal da 74 dB a escala completa, así que quedan 14 dB para ruido, jitter, referencia y distorsión. Cómo se mide: `docs/especificacion_adc.md` §6, prueba 4.15 de `docs/protocolos_prueba.md`. Por confirmar con el profesor.
-- ADC de 12 bits con `VREF = VDD` = 3,7 V, muestreo de **1 kHz** disparado por Timer0 (hardware) y conversión de I (RC0) y Q (RC1) en **menos de 1 ms**, sin esperas bloqueantes. Detalle y motivos: `docs/especificacion_adc.md` y `docs/criterios_diseno.md` §11.
+- ADC de 12 bits con `VREF = VDD` = 3,7 V, muestreo de **1 kHz** disparado por Timer0 (hardware) y conversión de I (RC0) y Q (RC1) en **menos de 1 ms**, sin esperas bloqueantes: 1000 pares/s (1 kHz por canal); el PWM usa todos los pares y la UART 1 de cada 2 (500 líneas/s). Detalle y motivos: `docs/especificacion_adc.md` y `docs/criterios_diseno.md` §11.
+- **Sin filtro anti-aliasing** en esta entrega (indicación de la persona, 2026-11-05): la prueba 4.7 y el requisito de Nyquist del enunciado (§3.2) quedan pendientes.
 - Firmas pedidas en clase: `tx_DAT(const char *DATA, uint16_t size)` y `tx_string(const char *data)`.
 - **Nunca escribir nombres de registros o bits de memoria.** Comprobarlos en `pic16f18426.h` (carpeta `pic\include\proc\` de la instalación de XC8) o en el datasheet. Cuando algo se verifique, anotarlo en `docs/notas_pic16f18426.md`.
 - Una sola ISR (`void __interrupt() isr(void)`, vector único). Comprobar bandera **y** habilitación de cada fuente. `TX1IF` vale 1 siempre que `TX1REG` esté vacío, aunque `TX1IE` sea 0.
@@ -70,8 +91,8 @@ Ese archivo es el enunciado de la práctica (qué pide el curso). Donde contradi
 ## Estado
 
 - Fase 1: enlace UART PC ↔ PIC (eco probado el 2026-10-19).
-- Fase 2 (actual): ADC de I/Q con envío en texto ASCII (T-09) y PWM por canal que reproduce las muestras (T-06). El auto-cero y su máquina de estados pasan a Macro.
-- *(Nota del chat de Claude, 2026-10-30, para revisión de Gemini)* El código del ADC (T-09) llegó en un zip antes de cerrar las pruebas de la Fase 1. Se fusionó en `firmware/Micro_Firmware.X` el 2026-10-30; está sin compilar en MPLAB X y sin probar. Ver T-09 y `docs/especificacion_adc.md`.
+- Fase 2 (actual): ADC de I/Q a 1 kHz con envío en texto ASCII a 500 líneas/s (T-09) y PWM por canal que reproduce las muestras (T-06). Sin filtro anti-aliasing. El auto-cero y su máquina de estados pasan a Macro.
+- El código de T-09 (fusionado el 2026-10-30) y el de T-06 compilan con XC8 2.40 (2026-11-04: 0 errores; programa 1002/16384 palabras, datos 204/2048 bytes). Falta *Clean and Build* en MPLAB X y probarlos en el chip. Ver T-06, T-09 y `docs/estado.md`.
 
 Cuando cambie una decisión de diseño (pines, baud, formato de envío), actualizar `docs/especificacion_diseno_uart.md`.
 
@@ -121,7 +142,7 @@ Propuesta inicial, tomada de "Siguiente paso" de `docs/estado.md`. Gemini la ref
 |---|---|---|---|
 | T-01 | Mover el código de MCC a `referencia_mcc/` y dejar `main.c` vacío | El proyecto abre y compila en MPLAB X | en espera: la persona decide si MCC se queda en el firmware |
 | T-02 | Reducida (2026-10-19): en `device_config.c` cambiar a mano `PPS1WAY = OFF` y `FCMEN = OFF` (C-01 y C-02 de `docs/revision_codigo_mcc.md`). Sin `config.c` nuevo (C-03 rechazada); el watchdog ya está apagado (C-04). El reloj de 16 MHz ya lo pone `mcc.c` | Compila; la UART sigue pasando 1.5, 1.6 y 1.7 de `docs/protocolos_prueba.md`; 0.4 y 0.5 cuando haya código de prueba | implementada, sin probar (2026-10-19) |
-| T-03 | Adaptar `eusart1.c`/`.h`, `interrupt_manager.c` y `main.c` (cambios C-06 a C-10 de `docs/revision_codigo_mcc.md`): sin esperas, buffers circulares sin contador, `tx_DAT` y `tx_string`, muy comentado. Instrucciones: `docs/instrucciones_claude_code_uart.md` | Compila sin warnings; pruebas 1.5, 1.6, 1.7, 1.9, 1.13 y 1.14 de `docs/protocolos_prueba.md` | aprobada (2026-10-19); requiere C-05 hecho en MCC |
+| T-03 | Adaptar `eusart1.c`/`.h`, `interrupt_manager.c` y `main.c` (cambios C-06 a C-10 de `docs/revision_codigo_mcc.md`): sin esperas, buffers circulares sin contador, `tx_DAT` y `tx_string`, muy comentado. Instrucciones: `docs/instrucciones_claude_code_uart.md` | Compila sin warnings; pruebas 1.5, 1.6, 1.7, 1.9, 1.13 y 1.14 de `docs/protocolos_prueba.md` | implementada (2026-10-19, buffers 64/32); el eco pasó 1.5, 1.6 y 1.7; faltan 1.9, 1.13 y 1.14 |
 | T-04 | Protocolo de tramas binarias con suma de verificación (`crc8.c/.h`, `protocol.c/.h`) | — | **retirada (2026-11-04)**: la persona decidió mandar solo texto ASCII; los archivos se borraron del firmware |
 | T-05 | LED de estado en RA5 (pin 2): heartbeat a 1 Hz **sin esperas** (base de tiempo con un temporizador e interrupción, nunca `__delay_ms`), manteniendo el eco de T-03. RA5 como salida digital (bajar su bit de `ANSELA`). Temporizador, registros y cuentas: elegirlos y verificarlos en el datasheet y en `pic16f18426.h`, y explicarlos en comentarios. Sin otros cambios a la UART | Pruebas 0.5 y 1.12 de `docs/protocolos_prueba.md`; el eco sigue pasando 1.5, 1.6 y 1.7 mientras parpadea | retirada (2026-10-21): la persona pidió quitar el código; las pruebas 0.5 y 1.12 quedan sin hacer |
 | T-06 | **(nuevo enfoque, 2026-11-04)** PWM por canal que reproduce las muestras: `pwm.c/.h` con `pwm_init`, `pwm_set`, `pwm_get` y `pwm_desde_adc`. PWM6 en RA2 (I) y PWM7 en RA4 (Q), Timer2 con `T2PR` = 255 a Fosc/4 (15,625 kHz, 10 bits), duty inicial 512. `main` copia cada par del ADC (1 kHz) al PWM: `duty = (código + 2) >> 2`; un filtro pasa bajos (≈ 100 Hz, `docs/especificacion_pwm.md` §6) devuelve la señal analógica. `adc_ascii_task()` pasa a `adc_ascii_par(i, q)` | Pruebas 3.1 a 3.8 de `docs/protocolos_prueba.md`; el envío ASCII sigue pasando 2.1 a 2.4 | implementada, sin probar (2026-11-04); compilada con XC8 2.40 (sin errores) |

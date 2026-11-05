@@ -44,7 +44,8 @@ Total del armado de una línea: **≈ 280 µs**. Estos valores son una **previsi
 
 - Caso A de adquisición (10 µs).
 - Datos de ejemplo: I = 2048 (1,85 V), Q = 2051 → línea `2048,2051\r\n` = `32 30 34 38 2C 32 30 35 31 0D 0A`.
-- En el tick en que no toca mandar línea, `main` solo cuenta el par.
+- En el tick en que no toca mandar línea, `main` solo actualiza el PWM y cuenta el par.
+- Las figuras **no incluyen** `pwm_desde_adc()` (T-06), que corre con cada par antes de `adc_ascii_par()`; su tiempo está sin estimar. Al medirlo, sumarlo en la sección 2 del script.
 - La ISR de TX tiene prioridad sobre la del ADC en `interrupt_manager.c`: si coinciden, el arranque de Q se retrasa.
 - RC2 con `ADC_PIN_PRUEBA = 2`: saca la salida del Timer0, que cambia de nivel en cada disparo (cuadrada de 500 Hz).
 

@@ -1,5 +1,7 @@
 # Guía: configurar MCC para obtener el código base de referencia
 
+> **Nota (2026-11-05):** cuando se escribió esta guía el código de MCC era solo referencia. Desde el 2026-10-19 la persona decidió usarlo **como base del firmware** (`MASTER_PLAN.md`, Reglas del proyecto), revisado en `docs/revision_codigo_mcc.md`. No pulsar *Generate* otra vez: los archivos ya están editados a mano.
+
 Proyecto Micro 3 · 2026-10-19 · Herramientas del equipo: MPLAB X 6, XC8 2.40 (ver `MASTER_PLAN.md`)
 
 > **Para qué sirve este código:** es **referencia**, no firmware. El enunciado prohíbe MCC en el entregable. Se genera para (1) comparar nombres y valores de registros con lo que escribimos a mano, (2) ver cómo el profesor estructura el buffer circular con cabeza, cola y banderas, y (3) tener un ejemplo que compile y funcione para contrastar. Nada de `mcc_generated_files/` entra al firmware final.

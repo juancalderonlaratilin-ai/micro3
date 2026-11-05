@@ -27,6 +27,8 @@ Reglas:
 - Instrumento de corrientes de Foucault. PCB1 excita la sonda, PCB2 demodula y entrega las componentes I y Q en banda base (filtros de 20 Hz, fn ≈ 19,4 Hz), restadas y amplificadas. La placa Micro3 tiene el PIC, que digitaliza I y Q y las manda al PC (LabVIEW o Python) por UART, como texto.
 - Microcontrolador: **PIC16F18426** (14 pines, 8 bits). Oscilador interno **Fosc = 16 MHz** (HFINTOSC, ±2 %), TCY = 4/Fosc = 250 ns. Alimentación **VDD = 3,7 V**.
 - Firmware en C con XC8 2.40 y MPLAB X, sin esperas bloqueantes (prohibido `while(!TXIF)` y `__delay_ms`).
+- El ADC muestrea I y Q a **1 kHz por canal** (Timer0, 1000 pares/s). Con **cada par** se actualiza un PWM por canal (PWM6 en RA2 = I, PWM7 en RA4 = Q, Timer2 a 15,625 kHz, 10 bits, `duty = (código + 2) >> 2`); la UART manda 1 de cada 2 pares (500 líneas/s). Detalle del PWM: `docs/especificacion_pwm.md` (fuera del alcance de este informe corto, salvo que se pida).
+- **En esta entrega no hay filtro anti-aliasing** (indicación del equipo).
 - Fuente accesible en la placa: la alimentación entra por **J1** (VDD_D y GND) y está en el punto de prueba **TP3** (VAA, que es VDD_D detrás de un filtro de 10 Ω con 2,2 µF) y en el pin 2 de J4 (conector del programador).
 
 ## B. UART: valores y cálculos
@@ -42,7 +44,7 @@ Reglas:
 | Tiempo de bit | 1/114 286 = **8,75 µs** (8,68 µs a 115200 exactos) | [CÁLCULO] |
 | Byte 8N1 | 10 × 8,75 = **87,5 µs** (86,8 µs nominal) | [CÁLCULO] |
 | Capacidad de la línea | 114 286 / 10 = **11 429 bytes/s** (11 520 a 115200 exactos) | [CÁLCULO] |
-| Entrada RX | nivel TTL (`INLVLC5 = 0`), VIH = 1,73 V | código / [DS] |
+| Entrada RX | nivel **Schmitt** (`INLVLC = 0x3F` en `pin_manager.c`), VIH = 0,8·VDD = 2,96 V. El diseño pedía TTL (`INLVLC5 = 0`, 1,73 V), sin aplicar | código / [DS] |
 | FIFO de recepción del chip | 2 bytes → la ISR debe leer antes de ≈ 2 bytes = **≈ 174 µs** o hay overrun | [DS] / [CÁLCULO] |
 | Buffers en RAM | circulares: **RX 32 bytes, TX 64 bytes** (potencias de 2: el índice se envuelve con `& (N−1)`, sin división) | código |
 | Interrupciones | RX siempre activa; TX activa solo mientras hay datos; un solo vector | código |
@@ -111,7 +113,7 @@ Límites: el PC depende del orden (primer número = I, segundo = Q); más bytes 
 
 **Por qué Vref = VDD:** cubre 0 a 3,7 V (los rieles de PCB2) sin recorte, no gasta pines (RA1/ADCVREF+ es ICSPCLK del programador), y como el nivel de reposo Vref2 = 1,85 V sale de un divisor del mismo riel, el código de reposo es **ratiométrico**: si VDD cambia, Vref2 y la referencia cambian juntos y el código sigue en 2048. Descartados: FVR de 4,096 V (no puede superar VDD), FVR de 2,048 V (recorta todo lo que pase de 2,048 V; el rango lineal 1,85 ± 0,185 V llega a 2,035 V, a solo 13 mV).
 
-**Nyquist y anti-alias:** la señal útil está por debajo de ≈ 20 Hz; fs = 1 kHz da un sobremuestreo de 1000/(2·20) = 25 y Nyquist en 500 Hz (en el PC, con 500 líneas/s, Nyquist en 250 Hz). Se cumple fc ≤ fs/2: el filtro de PCB2 (19,4 Hz) atenúa ≈ −56 dB a 500 Hz. La placa Micro3 agrega un Sallen-Key con ganancia 1,62 y ganancia total ≈ 1; con C = 470 nF corta a **≈ 5 Hz** (−24 dB a 20 Hz). Banda de diseño **por definir**: con 68 nF cortaría a ≈ 35 Hz (−0,3 dB a 20 Hz) y con 100 nF a ≈ 24 Hz. [CÁLCULO nodal]
+**Nyquist y anti-alias:** la señal útil está por debajo de ≈ 20 Hz; fs = 1 kHz da un sobremuestreo de 1000/(2·20) = 25 y Nyquist en 500 Hz (en el PC, con 500 líneas/s, Nyquist en 250 Hz). **En esta entrega no hay filtro anti-aliasing**: el criterio fc ≤ fs/2 del enunciado queda **por definir** (prueba 4.7). Lo que llegue al pin por encima de 500 Hz se pliega en el ADC, y por encima de 250 Hz en los datos del PC. El filtro de 19,4 Hz de PCB2 es parte de la demodulación (Práctica 2), no de esta entrega; las pruebas del ADC se hacen con el generador directo al pin. *(El Sallen-Key de ≈ 5 Hz de la placa Micro3 queda puenteado con JP_ADC_I/Q en 2–3 y no se usa en esta entrega.)*
 
 **Cuantización y SINAD:**
 - Ruido de cuantización: LSB/√12 = 0,9033/3,464 = **0,261 mV rms**. [CÁLCULO]
@@ -141,7 +143,7 @@ TACQ = TAMP + TC + TCOFF, con TAMP = 2 µs, TC = CHOLD·(RIC + RSS + RS)·ln(2¹
 
 **Operacional:** el acondicionamiento usa **MCP604** (Microchip, GBW 2,8 MHz, margen de fase 50°, asentamiento 4,5 µs al 0,01 % con ganancia 1). Su datasheet **no da la impedancia de salida**: solo dice que es una «fuente de baja impedancia». En lazo cerrado Zout ≈ Ro/(1 + A(f)·β), muy baja en continua y mayor a las frecuencias del golpe de carga del S&H. Valor [POR MEDIR] o simulable con el modelo SPICE. Con cargas de más de 40 pF el fabricante recomienda una resistencia en serie (RISO).
 
-**Red en el pin del ADC (placa Micro3):** salida del operacional → **R = 1 kΩ** → pin, con **C = 10 nF** a GND (C22 y C32).
+**Red en el pin del ADC (placa Micro3):** salida del operacional → **R = 1 kΩ** → pin, con **C = 10 nF** a GND (C22 y C32). No es un filtro anti-aliasing: su polo (15,9 kHz) está muy por encima de fs/2; sirve de depósito de carga para el S&H.
 - La resistencia aísla al operacional de la capacidad del pin (cumple la recomendación de RISO) y queda muy por debajo de los 10 kΩ máximos.
 - El capacitor es un depósito: al cerrarse el S&H, la carga de CHOLD se reparte y el pin salta solo CHOLD/(C + CHOLD) = 28 pF/10,03 nF = **0,28 %** de la diferencia con el canal anterior; luego se recupera por la resistencia con τ = 1 kΩ·10 nF = **10 µs**. Polo de la red: 1/(2π·1 kΩ·10 nF) = **15,9 kHz**.
 - Diafonía de I en Q que deja el CHOLD al cambiar de canal: 0,0028·e^(−TACQ/10 µs) → **−60 dB con 10 µs**, −86 dB con 40 µs. Por eso no conviene bajar la adquisición de unos 40 µs con esta red. [CÁLCULO]
