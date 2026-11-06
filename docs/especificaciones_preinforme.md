@@ -510,19 +510,17 @@ Estados: **Cumple (calculado)**: el cálculo lo cumple, falta medir. **Cumple (m
 | 7 | `TMR0_overflow`: ¿1000 o 2000 µs? | medición 4.5 |
 | 8 | `Zout` del opa de PCB2 y modelo final (TS924A, MCP604 o TLV9064) | persona (SPICE o medición) |
 | 9 | `Vref` del ADC: ¿`VDD`, FVR o externa? | profesor |
-| 10 | ¿Se acepta MCC en la entrega? El enunciado dice que no | profesor |
-| 11 | ¿Se acepta el envío en texto ASCII a 115200 (500 líneas/s) en vez de 9600 o 19200? | profesor |
-| 12 | Instrumento y qué se espera de «10 mil muestras con LabVIEW» (adquisición por UART o por DAQ) | profesor |
+| 10 | ¿Se acepta el envío en texto ASCII a 115200 (500 líneas/s) en vez de 9600 o 19200? | profesor |
+| 11 | Instrumento y qué se espera de «10 mil muestras con LabVIEW» (adquisición por UART o por DAQ) | profesor |
 
 ---
 
 ## 11. Contradicciones y riesgos detectados
 
-1. **MCC:** el enunciado dice «no usar MCC» y escribir C sobre los registros; el proyecto usa código de MCC (`Micro_Firmware.mc3`) y la persona dice que se puede. Hasta que el profesor lo confirme, el preinforme debe decir qué parte es de MCC y qué parte es a mano.
-2. **ASCII y baud:** el enunciado sugiere ASCII a 9600/19200; el proyecto usa ASCII a 115200 (a 9600 solo cabrían 87 líneas/s). El chat de clase admite «ASCII o el armado de la trama»: se documenta el camino ASCII (§7).
-3. **Jitter de 10 ns frente a Q por software** (§8.2). Es el riesgo técnico más grande de esta lista.
-4. **72 dB, 74 dB, 60 dB y 54 dB:** el ideal de 12 bits es 72 a 74 dB; el requisito es > 60 dB; con la señal real de PCB2 el ideal es 54 dB. No mezclar en el texto.
-5. **352 µV frente a 261 µV:** el valor del profesor corresponde a 5 V; con 3,7 V son 261 µV.
+1. **ASCII y baud:** el enunciado sugiere ASCII a 9600/19200; el proyecto usa ASCII a 115200 (a 9600 solo cabrían 87 líneas/s). El chat de clase admite «ASCII o el armado de la trama»: se documenta el camino ASCII (§7).
+2. **Jitter de 10 ns frente a Q por software** (§8.2). Es el riesgo técnico más grande de esta lista.
+3. **72 dB, 74 dB, 60 dB y 54 dB:** el ideal de 12 bits es 72 a 74 dB; el requisito es > 60 dB; con la señal real de PCB2 el ideal es 54 dB. No mezclar en el texto.
+4. **352 µV frente a 261 µV:** el valor del profesor corresponde a 5 V; con 3,7 V son 261 µV.
 6. **`ADACQ` = 160:** tres unidades posibles; los tiempos del preinforme deben presentarse como «caso A, caso B» hasta medir.
 7. **Periodo del Timer0:** 1000 o 2000 µs (§5 B4). Todo el presupuesto de tiempo supone 1000 µs.
 8. **Auto-cero:** pasa a Macro (cambio de enfoque del profesor, 2026-11-04). En Micro 3 el PWM reconstruye I y Q; su SINAD simulado (≈ 54 dB a 20 Hz) no se debe confundir con el requisito de > 60 dB del ADC.

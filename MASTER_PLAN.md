@@ -66,7 +66,7 @@ Ese archivo es el enunciado de la práctica (qué pide el curso). Donde contradi
 
 ## Reglas del proyecto
 
-- Se puede usar MCC como base (lo indica la persona; **el enunciado dice lo contrario, así que la persona lo confirma con el profesor**). Todo código de MCC se revisa y se entiende línea a línea antes de usarse, y lo que se cambie queda en `docs/revision_codigo_mcc.md`. El código que se agregue a mano es C escribiendo directamente en los registros (SFR).
+- Se usa MCC como base. Todo código de MCC se revisa y se entiende línea a línea antes de usarse, y lo que se cambie queda en `docs/revision_codigo_mcc.md`. El código que se agregue a mano es C escribiendo directamente en los registros (SFR).
 - Sin esperas bloqueantes en la lógica: nada de `while(!TXIF)` ni `__delay_ms` en el programa principal.
 - UART por interrupciones con FIFO circular. Envío en texto ASCII, una línea `xxxx,xxxx\r\n` cada 2 pares del ADC (500 por segundo). El PIC no recibe comandos.
 - Alimentación VCC = 3,7 V (fuente Keysight E36233A, según el preinforme). Conversor USB-serie a 3,3 V, nunca a 5 V.
@@ -140,7 +140,7 @@ Propuesta inicial, tomada de "Siguiente paso" de `docs/estado.md`. Gemini la ref
 
 | ID | Tarea | Criterio de aceptación | Estado |
 |---|---|---|---|
-| T-01 | Mover el código de MCC a `referencia_mcc/` y dejar `main.c` vacío | El proyecto abre y compila en MPLAB X | en espera: la persona decide si MCC se queda en el firmware |
+| T-01 | Mover el código de MCC a `referencia_mcc/` y dejar `main.c` vacío | El proyecto abre y compila en MPLAB X | descartada: MCC se queda como base del firmware |
 | T-02 | Reducida (2026-10-19): en `device_config.c` cambiar a mano `PPS1WAY = OFF` y `FCMEN = OFF` (C-01 y C-02 de `docs/revision_codigo_mcc.md`). Sin `config.c` nuevo (C-03 rechazada); el watchdog ya está apagado (C-04). El reloj de 16 MHz ya lo pone `mcc.c` | Compila; la UART sigue pasando 1.5, 1.6 y 1.7 de `docs/protocolos_prueba.md`; 0.4 y 0.5 cuando haya código de prueba | implementada, sin probar (2026-10-19) |
 | T-03 | Adaptar `eusart1.c`/`.h`, `interrupt_manager.c` y `main.c` (cambios C-06 a C-10 de `docs/revision_codigo_mcc.md`): sin esperas, buffers circulares sin contador, `tx_DAT` y `tx_string`, muy comentado. Instrucciones: `docs/instrucciones_claude_code_uart.md` | Compila sin warnings; pruebas 1.5, 1.6, 1.7, 1.9, 1.13 y 1.14 de `docs/protocolos_prueba.md` | implementada (2026-10-19, buffers 64/32); el eco pasó 1.5, 1.6 y 1.7; faltan 1.9, 1.13 y 1.14 |
 | T-04 | Protocolo de tramas binarias con suma de verificación (`crc8.c/.h`, `protocol.c/.h`) | — | **retirada (2026-11-04)**: la persona decidió mandar solo texto ASCII; los archivos se borraron del firmware |

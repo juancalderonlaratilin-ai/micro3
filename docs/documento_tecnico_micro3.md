@@ -73,7 +73,6 @@ El PIC es el bloque de adquisición de un instrumento de corrientes de Foucault.
 | R11 | Un PWM por canal que reproduce las muestras | profesor (2026-11-04) | PWM6/PWM7, 10 bits, actualizados con cada par | cumple (código); [POR MEDIR] Módulo 3 |
 | R12 | Filtro anti-aliasing `fc ≤ fs/2` | enunciado §3.2 | **no hay en esta entrega** | **pendiente** |
 | R13 | Resistencia de manejo del S&H y salida del opamp | profesor | fórmula de `TACQ` con `RS` (§4.4.5) | calculado; falta `Zout` del opamp |
-| R14 | No usar MCC | enunciado §2 | se usa MCC como base (decisión de la persona) | **por confirmar con el profesor** |
 
 ---
 
@@ -539,7 +538,7 @@ Latencia de una muestra hasta el último byte en el cable ≈ 1,3 ms (sin el USB
 
 ## 7. Cambios frente al código generado por MCC
 
-**Regla:** el código de MCC es la base (decisión de la persona; el enunciado dice «sin MCC», por confirmar). Todo lo que se cambia queda registrado con su ID en `docs/revision_codigo_mcc.md`. **Después de editar a mano no se vuelve a pulsar *Generate*:** reescribiría los archivos (el `.mc3` todavía dice `PPS1WAY` y `FCMEN` en ON).
+**Regla:** el código de MCC es la base. Todo lo que se cambia queda registrado con su ID en `docs/revision_codigo_mcc.md`. **Después de editar a mano no se vuelve a pulsar *Generate*:** reescribiría los archivos (el `.mc3` todavía dice `PPS1WAY` y `FCMEN` en ON).
 
 | ID | Archivo | Qué hacía MCC | Qué se cambió | Por qué |
 |---|---|---|---|---|
@@ -611,12 +610,11 @@ Latencia de una muestra hasta el último byte en el cable ≈ 1,3 ms (sin el USB
 3. **Unidad de `ADACQ`**: con 320 µs el sesgo I/Q sube a 4,4 % a 20 Hz.
 4. **`Zout` del opamp de PCB2** desconocida (el MCP604 no la publica): entra en `RS` y en `TACQ`.
 5. **SINAD > 60 dB**: falta confirmar con el profesor si es del ADC a escala completa (lo adoptado) o con la señal real de PCB2 (donde el ideal es 54 dB).
-6. **MCC**: el enunciado lo prohíbe; la persona dice que se puede.
-7. **RX en Schmitt** en vez de TTL (§3.3).
-8. **Capa física**: protoboard con divisor contra placa con SN74LVC1T45; confirmar cuál se entrega.
-9. **Exactitud del oscilador** (±2 %) mayor que el ±1 % pedido a `fs` (prueba 4.5); se corrige con `OSCTUNE` si hace falta.
-10. **Sin detección de líneas perdidas** en el PC (no hay número de secuencia).
-11. Lo [ESTIMADO] de los tiempos de CPU (≈ 280 µs para armar una línea) se mide con un pin y el osciloscopio.
+6. **RX en Schmitt** en vez de TTL (§3.3).
+7. **Capa física**: protoboard con divisor contra placa con SN74LVC1T45; confirmar cuál se entrega.
+8. **Exactitud del oscilador** (±2 %) mayor que el ±1 % pedido a `fs` (prueba 4.5); se corrige con `OSCTUNE` si hace falta.
+9. **Sin detección de líneas perdidas** en el PC (no hay número de secuencia).
+10. Lo [ESTIMADO] de los tiempos de CPU (≈ 280 µs para armar una línea) se mide con un pin y el osciloscopio.
 
 ---
 
@@ -731,7 +729,7 @@ Cada pregunta trae una respuesta corta y dónde está el detalle. Sirven para pr
 
 ### MCC y decisiones de proceso
 
-46. **El enunciado prohíbe MCC. ¿Qué parte del código es de MCC y qué parte escribieron ustedes?**
+46. **¿Qué parte del código es de MCC y qué parte escribieron ustedes?**
     MCC: inicialización (reloj, pines, ADC, Timer0, UART) y la estructura de la ISR. A mano: `adc_iq`, `adc_ascii`, `pwm`, `main`, y los cambios C-01 a C-12 (§7).
 47. **¿Qué cambiaron del código de MCC y por qué?**
     Quitar esperas (C-07, C-08), quitar contadores compartidos (C-09), llamadas directas en la ISR (C-06, C-11), buffers más grandes (C-05), `PPS1WAY` y `FCMEN` en OFF (C-01, C-02), canal inicial del ADC (C-12).

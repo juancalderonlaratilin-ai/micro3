@@ -37,7 +37,7 @@ Proyecto Micro 3 · Última actualización: 2026-11-05 (revisión de coherencia 
 
 ## Estado del código
 
-En `firmware/Micro_Firmware.X` hay código **generado por MCC en clase**, que la persona indica que sí puede usarse como base (el enunciado dice que no: confirmar con el profesor). Se revisa en `docs/revision_codigo_mcc.md`.
+En `firmware/Micro_Firmware.X` hay código **generado por MCC en clase**, que es la base del firmware. Se revisa en `docs/revision_codigo_mcc.md`.
 
 - **T-02** (C-01, C-02): `device_config.c` con `PPS1WAY = OFF` y `FCMEN = OFF` (comprobado en el `.hex`). El `.mc3` sigue en ON/ON: **no pulsar *Generate*** en MCC.
 - **T-03** (C-06 a C-10): `eusart1.c/.h` con buffers circulares sin contador (RX 32, TX 64), `Write`/`Read` sin espera, `tx_DAT` (todo o nada) y `tx_string`; `interrupt_manager.c` llama directo a las ISR. El eco se probó el 2026-10-19 (1.5, 1.6 y 1.7); el `main.c` de eco ya no está.
@@ -51,13 +51,12 @@ En `firmware/Micro_Firmware.X` hay código **generado por MCC en clase**, que la
 ## Sin confirmar
 
 1. Baud pedido por el profesor: 115200 (lo escogido) o 125 000 (lo que dejó el MCC de clase).
-2. Si el entregable final puede usar MCC: la persona dice que sí; el enunciado dice que no. Confirmarlo con el profesor.
-3. Que el chip sea `PIC16F18426` y no el `LF` (máximo 3,6 V), y que el PIC se alimente de los 3,7 V.
-4. Marcado y pines del módulo CP2102 (jumper de nivel en 3,3 V; TXD en reposo ≈3,3 V con el multímetro).
-5. Que los pines propuestos coincidan con la placa.
-6. Cómo se mide el requisito **SINAD > 60 dB** (ADC con senoidal casi a escala completa, lo adoptado, o señal real de ±185 mV, donde un 12 bits ideal da 54 dB) y a qué frecuencias. De dónde salen los 352 µV del profesor (son 12 bits y 5 V; con 3,7 V son 261 µV). Otras dudas de la clase (jitter < 10 ns y si aplica a Q, «modular y ver los 10 Hz»; la precisión del auto-cero pasa a Macro): `docs/especificaciones_preinforme.md` §10.2.
-7. Unidad de `ADACQ` = 160: 10 µs (lo que guarda MCC), 40 µs (Fig. 32-2 del datasheet) o 320 µs (texto del registro). Se mide con RC2 (prueba 4.16); la fórmula está en `docs/especificacion_adc.md` §3.1.
-8. Modelo e impedancia de salida (`Zout`) del opa de I y Q de PCB2 (el datasheet del MCP604 ya está en `docs/MCP601-2.PDF` y no da `Zout`; `.gitignore` ignora `docs/*.pdf`) y si `Vref` queda en `VDD` o pasa a FVR o externa: `docs/especificacion_adc.md` §3.2 y §7.1.
+2. Que el chip sea `PIC16F18426` y no el `LF` (máximo 3,6 V), y que el PIC se alimente de los 3,7 V.
+3. Marcado y pines del módulo CP2102 (jumper de nivel en 3,3 V; TXD en reposo ≈3,3 V con el multímetro).
+4. Que los pines propuestos coincidan con la placa.
+5. Cómo se mide el requisito **SINAD > 60 dB** (ADC con senoidal casi a escala completa, lo adoptado, o señal real de ±185 mV, donde un 12 bits ideal da 54 dB) y a qué frecuencias. De dónde salen los 352 µV del profesor (son 12 bits y 5 V; con 3,7 V son 261 µV). Otras dudas de la clase (jitter < 10 ns y si aplica a Q, «modular y ver los 10 Hz»; la precisión del auto-cero pasa a Macro): `docs/especificaciones_preinforme.md` §10.2.
+6. Unidad de `ADACQ` = 160: 10 µs (lo que guarda MCC), 40 µs (Fig. 32-2 del datasheet) o 320 µs (texto del registro). Se mide con RC2 (prueba 4.16); la fórmula está en `docs/especificacion_adc.md` §3.1.
+7. Modelo e impedancia de salida (`Zout`) del opa de I y Q de PCB2 (el datasheet del MCP604 ya está en `docs/MCP601-2.PDF` y no da `Zout`; `.gitignore` ignora `docs/*.pdf`) y si `Vref` queda en `VDD` o pasa a FVR o externa: `docs/especificacion_adc.md` §3.2 y §7.1.
 
 ## Siguiente paso
 
@@ -72,7 +71,7 @@ En `firmware/Micro_Firmware.X` hay código **generado por MCC en clase**, que la
 | Fecha | Quién | Qué se hizo | Resultado |
 |---|---|---|---|
 | 2026-10-16 | Chat de Claude | Especificación, criterios, protocolos de prueba y circuito UART | Documentos en `docs/`. Sin código |
-| 2026-10-19 | Chat de Claude | Roles Gemini (planificador) y Claude Code (desarrollador): `CLAUDE.md` y `GEMINI.md` cargan `MASTER_PLAN.md`. Versiones MPLAB X 6 y XC8 2.40. Guía para configurar MCC. Formato fijo para explicar código. MCC permitido según la persona; T-01 en espera | Archivos escritos. Sin probar que cada herramienta cargue el contexto. MCC por confirmar con el profesor |
+| 2026-10-19 | Chat de Claude | Roles Gemini (planificador) y Claude Code (desarrollador): `CLAUDE.md` y `GEMINI.md` cargan `MASTER_PLAN.md`. Versiones MPLAB X 6 y XC8 2.40. Guía para configurar MCC. Formato fijo para explicar código. MCC como base del firmware | Archivos escritos. Sin probar que cada herramienta cargue el contexto |
 | 2026-10-19 | Chat de Claude | Revisión de `eusart1.c` regenerado (16 MHz, SP1BRG=34 correctos; buffers 8/8; 9 puntos a no copiar, `docs/guia_mcc_referencia.md` §8). Revisión parte por parte: parte 1 explicada, C-01 a C-04 propuestos; mapa de ventanas de MCC a archivos. Instrucciones `docs/instrucciones_claude_code_uart.md`; T-03 aprobada (C-06 a C-10) | Solo lectura, sin compilar. Falta C-05 en MCC y la implementación |
 | 2026-10-19 | Chat de Claude | Pruebas UART con Python: 1.5 (20/20), 1.6 (256/256), 1.7 (1000/1000, 141 ms) pasaron; 1.18 y 0.3 pasaron (ID `0x30D2`, revisión `0x2002`). Detalle en `docs/resultados_pruebas_uart.md`. La persona aprobó C-01, C-02 y C-04 (watchdog apagado) y rechazó C-03; T-02 reducida y aprobada | Faltan 0.1, 1.4 y 1.17 (la persona los difiere). T-03 aún `implementada, sin probar` en 1.9, 1.13 y 1.14 |
 | 2026-10-19 | Claude Code | T-03 en 5 pasos revisados uno a uno: `eusart1.c/.h`, `interrupt_manager.c`, `main.c` de eco (C-06 a C-10); buffers 64/32 ya presentes; archivos en ISO-8859-1 con CRLF. T-02 reducida: `device_config.c` con `PPS1WAY = OFF` y `FCMEN = OFF` (C-01, C-02); nada más cambió | Las dos `implementada, sin probar`. XC8 2.40: sin errores, 6 avisos (520); el `.hex` muestra los dos bits de T-02 en 0. Sin MPLAB X ni chip. Sin commit |
@@ -89,4 +88,5 @@ En `firmware/Micro_Firmware.X` hay código **generado por MCC en clase**, que la
 | 2026-11-04 | Claude Code | T-06 revisada contra `especificacion_pwm.md` §5 y `especificacion_protocolo.md` §4: `pwm.c/.h`, `main.c` y `adc_ascii.*` ya cumplían, sin cambios. Nombres de registros y bits comprobados en `pic16f18426.h` (`notas` §9.1). Borrados del disco `crc8.*`, `protocol.*` y `adc_prueba.*` (seguían allí aunque no estaban en `nbproject/`) | XC8 2.40 (-O2): 0 errores, solo avisos (520) de funciones de MCC sin usar; programa 1002/16384 palabras (6,1 %), datos 204/2048 bytes (10 %). Sin chip. Sin commit |
 | 2026-11-05 | Claude (cowork) | Nuevo `docs/documento_tecnico_micro3.md`: especificaciones, decisiones, fórmulas, flujo del código, cada función, cambios C-01 a C-12 frente a MCC y 54 preguntas de evaluación. Hallazgo: `pin_manager.c` deja RC5 en Schmitt (`INLVLC = 0x3F`) aunque el diseño decía TTL; corregido en los `.md`. Figura 18-1 del DS (p.260): al ADC le llega el pulso de cada coincidencia del Timer0 (1 kHz) | Solo documentos |
 | 2026-11-05 | Claude (cowork) | Revisión de coherencia de todos los `.md` (`MASTER_PLAN.md`, `docs/` y `docs/diagramas_tiempo/`) contra el código, **sin tocar el código**: tabla «Qué tiene esta entrega» en `MASTER_PLAN.md`; sin filtro anti-aliasing; ADC a 1 kHz por canal, PWM con cada par, UART 500 líneas/s; quitadas menciones viejas (LED de RA5, «sin MCC», `fs` de 200 Hz, 15 bytes por línea, RC2 como pulso de la ISR, T-07 «por replantear», «sin compilar con XC8») | Solo documentos |
+| 2026-11-05 | Claude (cowork) | MCC queda como base del firmware en todos los `.md`: quitadas las menciones a que no se puede usar (enunciado §2, `MASTER_PLAN.md`, `documento_tecnico_micro3.md` R14 y pregunta 46, `estado.md`, `especificaciones_preinforme.md`, `criterios_diseno.md`, `especificacion_diseno_uart.md`, `guia_mcc_referencia.md`, `macro_autocero_pwm.md`); T-01 descartada | Solo documentos |
 | 2026-11-04 | Claude Code | Corrección: la persona vio `No rule to make target 'crc8.c'` al compilar en MPLAB X. `nbproject/` seguía con `crc8`, `protocol` y `adc_prueba` y **sin** `pwm.c` ni `adc_ascii.c` (mi revisión anterior dijo lo contrario por error). `configurations.xml` y `Makefile-default.mk` corregidos: fuentes `adc_iq.c adc_ascii.c pwm.c`, con sus reglas de compilación | XML válido; sin referencias viejas. `make` no está en esta máquina: la compilación con XC8 fue directa (0 errores). La persona debe repetir *Clean and Build* |

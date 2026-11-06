@@ -1,10 +1,10 @@
 # Guía: configurar MCC para obtener el código base de referencia
 
-> **Nota (2026-11-05):** cuando se escribió esta guía el código de MCC era solo referencia. Desde el 2026-10-19 la persona decidió usarlo **como base del firmware** (`MASTER_PLAN.md`, Reglas del proyecto), revisado en `docs/revision_codigo_mcc.md`. No pulsar *Generate* otra vez: los archivos ya están editados a mano.
+> **Nota (2026-11-05):** el código de MCC es **la base del firmware** (`MASTER_PLAN.md`, Reglas del proyecto), revisado en `docs/revision_codigo_mcc.md`. No pulsar *Generate* otra vez: los archivos ya están editados a mano.
 
 Proyecto Micro 3 · 2026-10-19 · Herramientas del equipo: MPLAB X 6, XC8 2.40 (ver `MASTER_PLAN.md`)
 
-> **Para qué sirve este código:** es **referencia**, no firmware. El enunciado prohíbe MCC en el entregable. Se genera para (1) comparar nombres y valores de registros con lo que escribimos a mano, (2) ver cómo el profesor estructura el buffer circular con cabeza, cola y banderas, y (3) tener un ejemplo que compile y funcione para contrastar. Nada de `mcc_generated_files/` entra al firmware final.
+> **Para qué sirve este código:** es la base del firmware. Además sirve para (1) comparar nombres y valores de registros con lo que escribimos a mano, (2) ver cómo el profesor estructura el buffer circular con cabeza, cola y banderas, y (3) tener un ejemplo que compile y funcione para contrastar.
 >
 > **Qué está verificado y qué no:** los *nombres de opciones y valores* de abajo salen de tu archivo `Micro_Firmware.mc3` y de los `.c` generados en clase (se leyeron). **La ubicación de cada casilla en las ventanas de MCC no está verificada**: no se ha visto la interfaz. Si algo no está donde dice la guía, mándame una captura y la corrijo.
 
@@ -119,7 +119,7 @@ Abre los `.c` y confirma que **estos valores cambiaron**. Si no, MCC no regener�
 
 ## 7. Reglas de uso
 
-- `mcc_generated_files/` y el `.mc3` viven en `referencia_mcc/` (tarea T-01), **no** en el proyecto que se entrega.
+- `mcc_generated_files/` y el `.mc3` quedan en el proyecto que se entrega (son la base del firmware).
 - Si regeneras con otra configuración, no sobrescribas la referencia anterior sin anotar en `docs/estado.md` qué cambió.
 - Para copiar un valor a mano, vuelve a comprobarlo en `pic16f18426.h` (XC8 2.40) o en el datasheet. MCC no es la fuente de verdad.
 

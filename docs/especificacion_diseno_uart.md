@@ -23,7 +23,7 @@ Proyecto Micro 3 · Firmware `firmware/Micro_Firmware.X` · Fecha: 2026-10-16 ·
 | Microcontrolador | PIC16F18426 (8 bits, encapsulado de 14 pines) | confirmado (configuración del proyecto) |
 | IDE / compilador | MPLAB X 6 + XC8 2.40 | confirmado |
 | Programador | SNAP | confirmado |
-| Estilo de código | C sobre registros (SFR), con el código de MCC como base, revisado línea a línea (`docs/revision_codigo_mcc.md`) | la persona (2026-10-19); el enunciado dice «sin MCC»: confirmar con el profesor |
+| Estilo de código | C sobre registros (SFR), con el código de MCC como base, revisado línea a línea (`docs/revision_codigo_mcc.md`) | la persona (2026-10-19) |
 | Oscilador | **HFINTOSC interno a 16 MHz**, sin PLL ni cristal (exactitud nominal ±2 %) | [PROPUESTA] |
 | Rango de VDD del chip | PIC16F18426 (sin "L"): 2,3 – 5,5 V con Fosc ≤ 16 MHz. **Un PIC16LF18426 (máx. 3,6 V) no sirve con 3,7 V** | [VERIFICADO] |
 | Ciclo de instrucción | Fcy = Fosc/4 = 4 MHz → 250 ns | calculado |

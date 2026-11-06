@@ -13,7 +13,7 @@ Proyecto Micro 3 · Enlace UART PC ↔ PIC (Fase 1) · Fecha: 2026-10-16 · Actu
 | # | Parámetro | Valor escogido | Estado |
 |---|---|---|---|
 | 1 | Microcontrolador | PIC16F18426 (14 pines, 28 KB flash, 2 KB RAM) | decidido |
-| 2 | Estilo de código | C sobre registros, con el código de MCC como base (revisado en `docs/revision_codigo_mcc.md`) | la persona (2026-10-19); el enunciado dice «sin MCC»: confirmar con el profesor |
+| 2 | Estilo de código | C sobre registros, con el código de MCC como base (revisado en `docs/revision_codigo_mcc.md`) | la persona (2026-10-19) |
 | 3 | Reloj | HFINTOSC interno a **16 MHz**, sin cristal | [PROPUESTA] |
 | 4 | Baud rate | **115200** (`SP1BRG = 34`, error −0,79 %) | [PROPUESTA] |
 | 5 | Formato de byte | **8N1** (8 datos, sin paridad, 1 parada) | [PROPUESTA] |
@@ -244,17 +244,16 @@ Fuente de los niveles del CP2102: datasheet del CP2102-GMR (Silicon Labs), secci
 ## 9. Pendientes por confirmar
 
 1. Qué baud pidió el profesor en clase (115200 contra 125 000 del código de MCC).
-2. Si el entregable final puede usar MCC.
-3. Marcado exacto del chip del módulo CP2102 y si tiene jumper de nivel.
-4. Que el chip del PIC sea el `PIC16F18426` y no el `PIC16LF18426` (máximo 3,6 V).
-5. Que el PIC se alimente de los 3,7 V de la placa.
-6. ~~Verificación de las tramas~~ (ya no aplica: desde el 2026-11-04 se manda texto ASCII, §5).
-7. Revisión de silicio (MPLAB X → Dashboard).
-8. Valor `VBOR` del brown-out (el MCC de clase usó `BORV = LO`, 2,45 V).
-9. Con qué ADC y `Vref` calculó el profesor los 352 µV (corresponden a 12 bits y 5 V; con 3,7 V son 261 µV).
-10. Cómo se mide el SINAD > 60 dB: sobre el ADC con una senoidal casi a escala completa (lo que se adoptó) o sobre la señal real de PCB2 (±185 mV, donde un 12 bits ideal da 54 dB), y a qué frecuencias.
-11. Unidad de `ADACQ` (10, 40 o 320 µs; prueba 4.16) y duración de las ISR de la UART, que fija el jitter del disparo de Q.
-12. Modelo e impedancia de salida (`Zout`) del opa de I y Q de PCB2 (datasheet del MCP604 en `docs/MCP601-2.PDF`, sin número de `Zout`) y si `Vref` se queda en `VDD` (`docs/especificacion_adc.md` §3.2 y §7.1).
+2. Marcado exacto del chip del módulo CP2102 y si tiene jumper de nivel.
+3. Que el chip del PIC sea el `PIC16F18426` y no el `PIC16LF18426` (máximo 3,6 V).
+4. Que el PIC se alimente de los 3,7 V de la placa.
+5. ~~Verificación de las tramas~~ (ya no aplica: desde el 2026-11-04 se manda texto ASCII, §5).
+6. Revisión de silicio (MPLAB X → Dashboard).
+7. Valor `VBOR` del brown-out (el MCC de clase usó `BORV = LO`, 2,45 V).
+8. Con qué ADC y `Vref` calculó el profesor los 352 µV (corresponden a 12 bits y 5 V; con 3,7 V son 261 µV).
+9. Cómo se mide el SINAD > 60 dB: sobre el ADC con una senoidal casi a escala completa (lo que se adoptó) o sobre la señal real de PCB2 (±185 mV, donde un 12 bits ideal da 54 dB), y a qué frecuencias.
+10. Unidad de `ADACQ` (10, 40 o 320 µs; prueba 4.16) y duración de las ISR de la UART, que fija el jitter del disparo de Q.
+11. Modelo e impedancia de salida (`Zout`) del opa de I y Q de PCB2 (datasheet del MCP604 en `docs/MCP601-2.PDF`, sin número de `Zout`) y si `Vref` se queda en `VDD` (`docs/especificacion_adc.md` §3.2 y §7.1).
 
 ---
 

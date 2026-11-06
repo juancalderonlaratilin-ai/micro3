@@ -84,7 +84,10 @@ void adc_iq_isr(void)
 {
     uint16_t resultado; /* el número que acaba de convertir el ADC (0 a 4095) */
 
-#if ADC_PIN_PRUEBA == 1
+#if ADC_PIN_PRUEBA == 2
+    
+    
+    
     LATCbits.LATC2 = 1; /* RC2 sube: empieza la ISR (se mide con el osciloscopio) */
 #endif
 
@@ -124,10 +127,11 @@ void adc_iq_isr(void)
         listo = true;
     }
 
-#if ADC_PIN_PRUEBA == 1
+#if ADC_PIN_PRUEBA == 2
     LATCbits.LATC2 = 0; /* RC2 baja: termina la ISR */
 #endif
 }
+
 
 bool adc_iq_get(uint16_t *i, uint16_t *q)
 {

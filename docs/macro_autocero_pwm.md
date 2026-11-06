@@ -167,4 +167,3 @@ Después viene el ADC y, encima de esto, el lazo de auto-cero (bisección con el
 - Los valores reales de R y C del filtro en tu placa y el nodo exacto donde entra el PWM.
 - Los nombres de los registros en `pic16f18426.h` (solo verificados en el datasheet).
 - El rizado y los tiempos de la §2 son cálculos con filtros ideales, sin cargas ni tolerancias.
-- Si el profesor acepta MCC (pendiente en `estado.md`): este diseño se escribe a mano sobre registros y vale con o sin MCC.
